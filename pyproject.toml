@@ -14,8 +14,14 @@ authors = [
   { name = "Jarl Sondre Sæther", email = "jarl.sondre.saether@cern.ch" },
 ]
 dependencies = [
+    "aiohttp>=3.11.13",
+    "cf-xarray>=0.10.2",
+    "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
     "itwinai[torch]",
     "pytest>=8.3.4",
+    "requests>=2.32.3",
+    "scikit-learn>=1.6.1",
+    "tqdm>=4.67.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -43,3 +49,4 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
+
