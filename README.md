@@ -8,8 +8,28 @@
 (EURAC), Matteo Bunino (CERN)
 
 ## Developer Installation
+
 To install this package, use the following command: 
 
 ```bash
 pip install -e .
+```
+
+### Installation of Horovod and DeepSpeed
+
+If you are on JSC, you need to run a SLURM script to properly install Horovod and
+DeepSpeed:
+
+```bash
+sbatch installation-scripts/horovod-deepspeed-JSC.slurm
+```
+The script will install Horovod and DeepSpeed with the correct installation flags. It
+usually takes around 20 minutes to complete. 
+
+## Launching the Training
+
+You can launch the training using `itwinai`'s `exec-pipeline` command as follows:
+
+```bash
+itwinai exec-pipeline --config-path configuration_files --config-name training
 ```

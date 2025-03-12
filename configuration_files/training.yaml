@@ -62,7 +62,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
+epochs: 5
 
 gradient_clip: null
 
