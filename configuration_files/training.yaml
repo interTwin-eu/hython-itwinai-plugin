@@ -12,7 +12,7 @@
 
 # General configuration
 experiment_name: "training"
-experiment_run: "run_0"
+experiment_run: "hython-plugin"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
@@ -62,7 +62,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 30
+epochs: 2
 
 gradient_clip: null
 
