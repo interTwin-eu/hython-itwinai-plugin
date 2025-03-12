@@ -17,7 +17,7 @@ dependencies = [
     "aiohttp>=3.11.13",
     "cf-xarray>=0.10.2",
     "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
-    "itwinai[torch]",
+    "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@48df37b003555a9499868b9834fcaf9d7293319a",
     "pytest>=8.3.4",
     "requests>=2.32.3",
     "scikit-learn>=1.6.1",

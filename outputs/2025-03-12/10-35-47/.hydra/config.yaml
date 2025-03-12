@@ -1,0 +1,152 @@
+experiment_name: training
+experiment_run: run_0
+work_dir: /p/scratch/intertwin/datasets/eurac/model
+train_temporal_range:
+- '2016-01-01'
+- '2019-12-31'
+valid_temporal_range:
+- '2020-01-01'
+- '2020-12-31'
+test_temporal_range:
+- '2019-01-01'
+- '2020-12-31'
+seed: 10
+device: cuda:0
+model: CudaLSTM
+hidden_size: 64
+dropout: 0.2
+lstm_layers: 1
+lstm_batch_norm: false
+model_head_layer: regression
+model_head_activation: linear
+model_head_kwargs: {}
+strategy: ddp
+hython_trainer: rnntrainer
+loss_fn:
+  _target_: hython.losses.RMSELoss
+metric_fn:
+  _target_: hython.metrics.MSEMetric
+optimizer: adam
+lr_scheduler:
+  mode: min
+  factor: 0.5
+  patience: 10
+seq_length: 180
+learning_rate: 0.001
+batch: 512
+epochs: 30
+gradient_clip: null
+target_weights: even
+predict_steps: 0
+train_downsampler:
+  _target_: hython.sampler.downsampler.RandomDownsampler
+  frac_time: null
+  frac_space: 0.01
+valid_downsampler:
+  _target_: hython.sampler.downsampler.RandomDownsampler
+  frac_time: null
+  frac_space: 0.01
+test_downsampler: null
+downsampling_temporal_dynamic: true
+temporal_downsampling: true
+temporal_subset:
+- 200
+- 200
+data_lazy_load: false
+dataset: WflowSBM
+data_source:
+  file:
+    static_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_static.zarr
+    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
+    target_variables: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
+static_categorical_inputs:
+- wflow_landuse
+- wflow_soil
+static_inputs:
+- thetaS
+- thetaR
+- KsatVer
+- c
+dynamic_inputs:
+- precip
+- pet
+- temp
+target_variables:
+- vwc
+mask_variables:
+- mask_missing
+- mask_lake
+scaling_variant: minmax
+scaling_use_cached: true
+model_logger:
+  CudaLSTM:
+    logger: local
+    model_component: model
+    model_name: ${model}
+    model_uri: ${work_dir}/${experiment_name}_${experiment_run}/${model}.pt
+    log: true
+    load: false
+training_pipeline:
+  _target_: itwinai.pipeline.Pipeline
+  steps:
+  - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
+    hython_trainer: ${hython_trainer}
+    dynamic_inputs: ${dynamic_inputs}
+    static_inputs: ${static_inputs}
+    target_variables: ${target_variables}
+    mask_variables: ${mask_variables}
+    train_temporal_range: ${train_temporal_range}
+    valid_temporal_range: ${valid_temporal_range}
+    dataset: ${dataset}
+    data_lazy_load: ${data_lazy_load}
+    downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
+    data_source: ${data_source}
+    scaling_variant: ${scaling_variant}
+    scaling_use_cached: ${scaling_use_cached}
+    experiment_name: ${experiment_name}
+    experiment_run: ${experiment_run}
+    work_dir: ${work_dir}
+    train_downsampler: ${train_downsampler}
+    valid_downsampler: ${valid_downsampler}
+  - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+    model: ${model}
+    config:
+      experiment: ${experiment_name}/${experiment_run}
+      experiment_name: ${experiment_name}
+      experiment_run: ${experiment_run}
+      work_dir: ${work_dir}
+      batch_size: ${batch}
+      learning_rate: ${learning_rate}
+      num_workers_dataloader: 1
+      hython_trainer: ${hython_trainer}
+      temporal_downsampling: ${temporal_downsampling}
+      temporal_subset: ${temporal_subset}
+      seq_length: ${seq_length}
+      target_variables: ${target_variables}
+      dynamic_inputs: ${dynamic_inputs}
+      static_inputs: ${static_inputs}
+      optimizer: ${optimizer}
+      lr_scheduler: ${lr_scheduler}
+      target_weights: ${target_weights}
+      hidden_size: ${hidden_size}
+      dropout: ${dropout}
+      lstm_layers: ${lstm_layers}
+      lstm_batch_norm: ${lstm_batch_norm}
+      model_head_layer: ${model_head_layer}
+      model_head_activation: ${model_head_activation}
+      model_head_kwargs: ${model_head_kwargs}
+      loss_fn: ${loss_fn}
+      metric_fn: ${metric_fn}
+      gradient_clip: ${gradient_clip}
+      predict_steps: ${predict_steps}
+      model_logger: ${model_logger}
+    strategy: ${strategy}
+    epochs: ${epochs}
+    random_seed: ${seed}
+    profiling_wait_epochs: 1
+    profiling_warmup_epochs: 1
+    logger:
+      _target_: itwinai.loggers.LoggersCollection
+      loggers:
+      - _target_: itwinai.loggers.ConsoleLogger
+        log_freq: 1
