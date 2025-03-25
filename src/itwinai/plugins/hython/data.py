@@ -7,6 +7,18 @@ from hython.datasets import get_dataset
 from hython.datasets.wflow_sbm import WflowSBM
 from hython.config import Config
 
+def calculate_hython_constant(n: int):
+    import time
+        
+    start = time.time()
+
+    c = 0
+    for i in range(n): 
+        c += i**120
+    end = time.time()
+    # print(f"slow func took: {end - start:.2f} seconds to do {n} iterations")
+    return c
+
 
 class RNNDatasetGetterAndPreprocessor(DataSplitter):
     def __init__(
@@ -46,9 +58,22 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
             setattr(cfg, i, self.parameters[i])
 
         scaler = Scaler(cfg, cfg.scaling_use_cached)
+        
+        # train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")
+        # val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")
 
-        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")
+        ################## Deliberate Slow-Down ##################
+        original_getitem = WflowSBM.__getitem__
 
-        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")
+        def new_get_item(self, idx: int):
+            calculate_hython_constant(n=10**4)
+            return original_getitem(self, idx)
 
-        return train_dataset, val_dataset, None
+        WflowSBM.__getitem__ = new_get_item
+        ##########################################################
+
+        training_dataset = WflowSBM(cfg=cfg, scaler=scaler, is_train=True, period="train")
+        val_dataset = WflowSBM(cfg=cfg, scaler=scaler, is_train=False, period="valid")
+
+
+        return training_dataset, val_dataset, None

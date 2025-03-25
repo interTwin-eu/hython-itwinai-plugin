@@ -34,6 +34,19 @@ from itwinai.torch.profiling.profiler import profile_torch_trainer
 from hydra.utils import instantiate
 
 
+def calculate_hython_constant(n: int):
+    import time
+        
+    start = time.time()
+
+    c = 0
+    for i in range(n): 
+        c += i**120
+    end = time.time()
+    print(f"slow func took: {end - start:.2f} seconds to do {n} iterations")
+    return c
+
+
 class RNNDistributedTrainer(TorchTrainer):
     """Trainer class for RNN model using pytorch.
 
@@ -216,11 +229,14 @@ class RNNDistributedTrainer(TorchTrainer):
         loss_history = {"train": [], "val": []}
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
+        print(f"Length of train_loader: {len(self.train_loader)}")
 
         best_loss = float("inf")
         for epoch in tqdm(range(self.epochs)):
             epoch_start_time = default_timer()
             self.set_epoch(epoch)
+
+            # calculate_hython_constant(10**7)
 
             # run train_valid epoch step of hython trainer
             (
