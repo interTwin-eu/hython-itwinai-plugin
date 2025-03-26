@@ -165,3 +165,7 @@ cython_debug/
 *scalability-metrics/
 *outputs/
 *slurm_job_logs/
+horovod_ds_installation.err
+horovod_ds_installation.out
+ray_checkpoints/
+slurm_scripts/

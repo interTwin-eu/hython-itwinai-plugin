@@ -10,18 +10,20 @@ requires-python = ">=3.11"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
-  { name = "Iacopo Ferrario", email = "IacopoFederico.Ferrario@eurac.edu" }, 
+  { name = "Iacopo Ferrario", email = "IacopoFederico.Ferrario@eurac.edu" },
   { name = "Jarl Sondre Sæther", email = "jarl.sondre.saether@cern.ch" },
+  { name = "Linus Eickhoff", email = "linus.maximilian.eickhoff@cern.ch" },
 ]
 dependencies = [
-    "aiohttp>=3.11.13",
-    "cf-xarray>=0.10.2",
-    "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
-    "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@48df37b003555a9499868b9834fcaf9d7293319a",
-    "pytest>=8.3.4",
-    "requests>=2.32.3",
-    "scikit-learn>=1.6.1",
-    "tqdm>=4.67.1",
+  "aiohttp>=3.11.13",
+  "cf-xarray>=0.10.2",
+  "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
+  # TODO: remove this once the unified-trainers branch is merged into the main branch
+  "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@unified-trainers",
+  "pytest>=8.3.4",
+  "requests>=2.32.3",
+  "scikit-learn>=1.6.1",
+  "tqdm>=4.67.1",
 ]
 
 [tool.setuptools.packages.find]
@@ -31,9 +33,7 @@ where = ["src"]
 
 # Make sure to list all the plugin subfolders here,
 # otherwise the plugin may not be installed correctly!
-include = [
-    "itwinai.plugins.hython",
-]
+include = ["itwinai.plugins.hython"]
 
 # Ruff configuration: https://docs.astral.sh/ruff/configuration/
 [tool.ruff]
@@ -49,4 +49,3 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
