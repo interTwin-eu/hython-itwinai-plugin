@@ -15,10 +15,10 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import ray
 import torch
+from hydra import compose, initialize
 from ray import train, tune
 
 from itwinai.cli import exec_pipeline_with_compose
-from hydra import compose, initialize
 
 
 def run_trial(config: Dict, data: Dict):
