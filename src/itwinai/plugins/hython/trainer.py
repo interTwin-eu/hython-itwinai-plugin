@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from timeit import default_timer
-from typing import Any, Callable, Dict, List, Literal, Optional, Tuple
+from typing import Any, Callable, Dict, List, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -41,25 +41,25 @@ class RNNDistributedTrainer(TorchTrainer):
         config (Union[Dict, TrainingConfiguration]): training configuration
             containing hyperparameters.
         epochs (int): number of training epochs.
-        model (Optional[nn.Module], optional): model to train.
+        model (nn.Module | None, optional): model to train.
             Defaults to None.
         strategy (Literal['ddp', 'deepspeed', 'horovod'], optional):
             distributed strategy. Defaults to 'ddp'.
-        validation_every (Optional[int], optional): run a validation epoch
+        validation_every (int | None, optional): run a validation epoch
             every ``validation_every`` epochs. Disabled if None. Defaults to 1.
-        test_every (Optional[int], optional): run a test epoch
+        test_every (int | None, optional): run a test epoch
             every ``test_every`` epochs. Disabled if None. Defaults to None.
-        random_seed (Optional[int], optional): set random seed for
+        random_seed (int | None, optional): set random seed for
             reproducibility. If None, the seed is not set. Defaults to None.
-        logger (Optional[Logger], optional): logger for ML tracking.
+        logger (Logger | None, optional): logger for ML tracking.
             Defaults to None.
-        metrics (Optional[Dict[str, Metric]], optional): map of torch metrics
+        metrics (Dict[str, Metric] | None, optional): map of torch metrics
             metrics. Defaults to None.
         checkpoints_location (str): path to checkpoints directory.
             Defaults to "checkpoints".
-        checkpoint_every (Optional[int]): save a checkpoint every
+        checkpoint_every (int | None): save a checkpoint every
             ``checkpoint_every`` epochs. Disabled if None. Defaults to None.
-        name (Optional[str], optional): trainer custom name. Defaults to None.
+        name (str | None, optional): trainer custom name. Defaults to None.
     """
     config: HythonConfiguration
     lr_scheduler: ReduceLROnPlateau | None = None
@@ -70,14 +70,14 @@ class RNNDistributedTrainer(TorchTrainer):
         config: Dict[str, Any],
         epochs: int,
         model: str,
-        strategy: Optional[Literal["ddp", "deepspeed", "horovod"]] = "ddp",
-        test_every: Optional[int] = None,
-        random_seed: Optional[int] = None,
-        logger: Optional[Logger] = None,
-        metrics: Optional[Dict[str, Callable]] = None,
+        strategy: Literal["ddp", "deepspeed", "horovod"] | None = "ddp",
+        test_every: int | None = None,
+        random_seed: int | None = None,
+        logger: Logger | None = None,
+        metrics: Dict[str, Callable] | None = None,
         checkpoints_location: str = "checkpoints",
-        checkpoint_every: Optional[int] = None,
-        name: Optional[str] = None,
+        checkpoint_every: int | None = None,
+        name: str | None = None,
         **kwargs,
     ) -> None:
         # convert config to HythonConfiguration
@@ -110,16 +110,16 @@ class RNNDistributedTrainer(TorchTrainer):
     def execute(
         self,
         train_dataset: Dataset,
-        validation_dataset: Optional[Dataset] = None,
-        test_dataset: Optional[Dataset] = None,
+        validation_dataset: Dataset | None = None,
+        test_dataset: Dataset | None = None,
     ) -> Tuple[Dataset, Dataset, Dataset, Any]:
         """Execute the trainer.
 
         Args:
             train_dataset (Dataset): training dataset
-            validation_dataset (Optional[Dataset], optional): validation dataset.
+            validation_dataset (Dataset | None, optional): validation dataset.
                 Defaults to None.
-            test_dataset (Optional[Dataset], optional): test dataset. Defaults to None.
+            test_dataset (Dataset | None, optional): test dataset. Defaults to None.
 
         Raises:
             ValueError: if model could not be instantiated
@@ -317,14 +317,14 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         prediction: Dict[str, torch.Tensor],
         target: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
     ) -> None:
         """Concatenate results for reporting and computing the metrics
 
         Args:
             prediction (Dict[str, torch.Tensor]): prediction
             target (torch.Tensor): target
-            mask (Optional[torch.Tensor], optional): mask. Defaults to None.
+            mask (torch.Tensor | None, optional): mask. Defaults to None.
         """
 
         # prediction can be probabilistic
@@ -361,7 +361,7 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         prediction: Dict[str, torch.Tensor],
         target: torch.Tensor,
-        valid_mask: Optional[torch.Tensor] = None,
+        valid_mask: torch.Tensor | None = None,
         target_weight: Dict[str, float] = {},
     ) -> torch.Tensor:
         """Compute the loss for the batch.
@@ -369,7 +369,7 @@ class RNNDistributedTrainer(TorchTrainer):
         Args:
             prediction (Dict[str, torch.Tensor]): prediction
             target (torch.Tensor): target
-            valid_mask (Optional[torch.Tensor], optional): mask. Defaults to None.
+            valid_mask (torch.Tensor | None, optional): mask. Defaults to None.
             target_weight (Dict[str, float], optional): target weight. Defaults to {}.
 
         Returns:
@@ -487,7 +487,7 @@ class RNNDistributedTrainer(TorchTrainer):
         model: nn.Module,
         dataloader: DataLoader,
         device: torch.device,
-        opt: Optional[Optimizer] = None,
+        opt: Optimizer | None = None,
     ) -> Tuple[Any, Dict[str, Any]]:
         """Run one epoch of the model.
 
@@ -495,7 +495,7 @@ class RNNDistributedTrainer(TorchTrainer):
             model (nn.Module): model
             dataloader (DataLoader): dataloader
             device (torch.device): device
-            opt (Optional[Optimizer], optional): optimizer. Defaults to None.
+            opt (Optimizer | None, optional): optimizer. Defaults to None.
 
         Returns:
             Tuple[Any, Dict[str, Any]]: loss, metric
@@ -552,14 +552,14 @@ class RNNDistributedTrainer(TorchTrainer):
     def _set_dynamic_temporal_downsampling(
         self,
         data_loaders: List[DataLoader],
-        opt: Optional[Optimizer] = None,
+        opt: Optimizer | None = None,
     ) -> None:
         """Return the temporal indices of the timeseries, it may be a subset of the time
             indices.
 
         Args:
             data_loaders (List[DataLoader]): data loaders
-            opt (Optional[Optimizer], optional): optimizer. Defaults to None.
+            opt (Optimizer | None, optional): optimizer. Defaults to None.
         """
 
         try:

@@ -23,8 +23,6 @@ test_temporal_range: ["2019-01-01", "2020-12-31"]
 
 seed: 10 
 
-device: "cuda:0"
-
 # === Model ===
 
 model: CudaLSTM
