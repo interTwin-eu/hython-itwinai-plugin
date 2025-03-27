@@ -18,8 +18,7 @@ dependencies = [
   "aiohttp>=3.11.13",
   "cf-xarray>=0.10.2",
   "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
-  # TODO: remove this once the unified-trainers branch is merged into the main branch
-  "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@unified-trainers",
+  "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@main",
   "pytest>=8.3.4",
   "requests>=2.32.3",
   "scikit-learn>=1.6.1",
