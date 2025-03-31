@@ -27,24 +27,22 @@ GPUS_PER_NODE=2
 if [[ $WHERE_TO_RUN == "jsc" ]]; then
 
     # JSC (venv)
-    export CONTAINER_PATH="../../hython.sif"
+    export CONTAINER_PATH="./hython.sif"
     # Path to shared filesystem that all the Ray workers can access. /tmp is a local filesystem path to each worker
     # This is only needed by tests. This is needed by the torch trainer to store and retrieve checkpoints
-    export SHARED_FS_PATH="/p/project1/intertwin/bunino1/tmp"
+    export SHARED_FS_PATH="/p/project1/intertwin/eickhoff2/tmp"
 
-    TESTS_LOCATION="."
     SLURM_SCRIPT="slurm_ray_container.sh"
     PARTITION="develbooster"
 
 elif [[ $WHERE_TO_RUN == "vega" ]]; then
 
     # Vega (container)
-    export CONTAINER_PATH="../../hython.sif"
+    export CONTAINER_PATH="./hython.sif"
     # Path to shared filesystem that all the Ray workers can access. /tmp is a local filesystem path to each worker
     # This is only needed by tests. This is needed by the torch trainer to store and retrieve checkpoints
     export SHARED_FS_PATH="/ceph/hpc/data/st2301-itwin-users/tmp-mbunino2"
 
-    TESTS_LOCATION="/app/tests"
     SLURM_SCRIPT="slurm.vega.sh"
     PARTITION="gpu"
 
