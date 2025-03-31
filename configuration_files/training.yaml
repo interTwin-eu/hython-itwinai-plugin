@@ -13,6 +13,7 @@
 # General configuration
 experiment_name: "training"
 experiment_run: "hython-plugin"
+run_id: "run0"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
@@ -60,9 +61,9 @@ seq_length: 180
 
 learning_rate: 0.001
 
-batch: 512
+batch: 128
 
-epochs: 5
+epochs: 10
 
 gradient_clip: null
 
@@ -208,8 +209,6 @@ training_pipeline:
         target_weights: ${target_weights}
 
         # model config
-
-
         hidden_size: ${hidden_size}
         dropout: ${dropout}
         lstm_layers: ${lstm_layers}
@@ -221,14 +220,15 @@ training_pipeline:
 
         loss_fn: ${loss_fn}
         metric_fn: ${metric_fn}
-
         gradient_clip: ${gradient_clip}
-
         predict_steps: ${predict_steps}
 
         # model logger
         model_logger: ${model_logger}
-
+      measure_gpu_data: True
+      measure_communication_overhead: False
+      measure_epoch_time: True
+      run_id: ${run_id}
       strategy: ${strategy}
       epochs: ${epochs}
       random_seed: ${seed}

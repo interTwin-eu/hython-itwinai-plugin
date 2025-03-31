@@ -99,7 +99,6 @@ class RNNDistributedTrainer(TorchTrainer):
         self.model_dict = {}
 
     @suppress_workers_print
-    # @profile_torch_trainer
     def execute(
         self,
         train_dataset: Dataset,
@@ -193,8 +192,8 @@ class RNNDistributedTrainer(TorchTrainer):
             self.train_loader.sampler.set_epoch(epoch)
             self.val_loader.sampler.set_epoch(epoch)
 
-    # @profile_torch_trainer
-    # @measure_gpu_utilization
+    @profile_torch_trainer
+    @measure_gpu_utilization
     def train(self):
         """Override train_val version of hython to support distributed strategy."""
 
@@ -202,7 +201,7 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.strategy.is_main_worker:
             num_nodes = os.environ.get("SLURM_NNODES", "unk")
             series_name = os.environ.get("DIST_MODE", "unk") + "-torch"
-            epoch_time_output_dir = Path("scalability-metrics/epoch-time")
+            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
