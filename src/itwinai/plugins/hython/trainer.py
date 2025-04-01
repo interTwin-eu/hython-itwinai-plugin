@@ -8,7 +8,6 @@ import pandas as pd
 import torch
 from hydra.utils import instantiate
 from ray import train
-from ray.train import get_context
 from torch import nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.optim.optimizer import Optimizer
@@ -20,7 +19,7 @@ from hython.models import ModelLogAPI
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
-from itwinai.distributed import ray_cluster_is_running, suppress_workers_print
+from itwinai.distributed import suppress_workers_print
 from itwinai.loggers import EpochTimeTracker, Logger
 from itwinai.torch.distributed import (
     DeepSpeedStrategy,
@@ -105,6 +104,7 @@ class RNNDistributedTrainer(TorchTrainer):
         self.model_class_name = model
         self.model_dict = {}
 
+
     @suppress_workers_print
     # @profile_torch_trainer
     def execute(
@@ -138,6 +138,7 @@ class RNNDistributedTrainer(TorchTrainer):
             # LOAD MODEL
             self.model_logger = self.model_api.get_model_logger("model")
             self.model = self.model_class(self.config)
+            # print(f"trainable PARAMS: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
             if self.model is None:
                 raise ValueError("Model could not be instantiated")
 
@@ -399,12 +400,12 @@ class RNNDistributedTrainer(TorchTrainer):
                 n = torch.ones_like(iypred["mu"])
 
             w: float = target_weight[target_name]
-            # ! TODO: This is a hack to move the data to the correct device, when using Ray
+            # ! Should not be needed, as we do not run distributed trials!
             # check if ray is running before
-            if ray_cluster_is_running():
-                for key, value in iypred.items():
-                    iypred[key] = value.to(f"cuda:{get_context().get_local_rank()}")
-                iytrue.to(f"cuda:{get_context().get_local_rank()}")
+            # if ray_cluster_is_running():
+            #     for key, value in iypred.items():
+            #         iypred[key] = value.to(f"cuda:{get_context().get_local_rank()}")
+            #     iytrue.to(f"cuda:{get_context().get_local_rank()}")
 
             loss_tmp: torch.Tensor = self.config.loss_fn(iytrue, **iypred)
 
@@ -570,13 +571,10 @@ class RNNDistributedTrainer(TorchTrainer):
         if temporal_downsampling:
             if len(self.config.temporal_subset) > 1:
                 # use different time indices for training and validation
-                if opt is None:
-                    # validation
-                    time_range = next(iter(data_loaders[-1]))["xd"].shape[1]
-                    temporal_subset = self.config.temporal_subset[-1]
-                else:
-                    time_range = next(iter(data_loaders[0]))["xd"].shape[1]
-                    temporal_subset = self.config.temporal_subset[0]
+                idx = -1 if opt is None else 0
+                # validation
+                time_range = next(iter(data_loaders[idx]))["xd"].shape[1]
+                temporal_subset = self.config.temporal_subset[idx]
 
                 self.time_index = np.random.randint(
                     0, time_range - self.config.seq_length, temporal_subset
