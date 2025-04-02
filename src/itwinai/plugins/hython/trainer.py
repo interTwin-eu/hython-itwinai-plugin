@@ -104,7 +104,6 @@ class RNNDistributedTrainer(TorchTrainer):
         self.model_class_name = model
         self.model_dict = {}
 
-
     @suppress_workers_print
     # @profile_torch_trainer
     def execute(
@@ -138,7 +137,6 @@ class RNNDistributedTrainer(TorchTrainer):
             # LOAD MODEL
             self.model_logger = self.model_api.get_model_logger("model")
             self.model = self.model_class(self.config)
-            # print(f"trainable PARAMS: {sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
             if self.model is None:
                 raise ValueError("Model could not be instantiated")
 
