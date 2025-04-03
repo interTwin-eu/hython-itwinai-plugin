@@ -32,7 +32,7 @@ if [[ $WHERE_TO_RUN == "jsc" ]]; then
     # This is only needed by tests. This is needed by the torch trainer to store and retrieve checkpoints
     export SHARED_FS_PATH="/p/project1/intertwin/eickhoff2/tmp"
 
-    SLURM_SCRIPT="slurm_ray_container.sh"
+    SLURM_SCRIPT="jsc_ray_container.sh"
     PARTITION="develbooster"
 
 elif [[ $WHERE_TO_RUN == "vega" ]]; then
@@ -41,9 +41,9 @@ elif [[ $WHERE_TO_RUN == "vega" ]]; then
     export CONTAINER_PATH="./hython.sif"
     # Path to shared filesystem that all the Ray workers can access. /tmp is a local filesystem path to each worker
     # This is only needed by tests. This is needed by the torch trainer to store and retrieve checkpoints
-    export SHARED_FS_PATH="/ceph/hpc/data/st2301-itwin-users/tmp-mbunino2"
+    export SHARED_FS_PATH="/ceph/hpc/data/st2301-itwin-users/tmp-lineick"
 
-    SLURM_SCRIPT="slurm.vega.sh"
+    SLURM_SCRIPT="vega_ray_container.sh"
     PARTITION="gpu"
 
 else
