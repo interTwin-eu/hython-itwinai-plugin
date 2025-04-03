@@ -16,7 +16,7 @@
 
 # Job configuration
 #SBATCH --job-name=eurac-train
-#SBATCH --account=intertwin
+#SBATCH --account=s24r05-03-users
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
 #SBATCH --output=job.out
@@ -24,14 +24,14 @@
 #SBATCH --time=00:40:00
 
 # Resources allocation
-#SBATCH --partition=develbooster
+#SBATCH --partition=gpu
 #SBATCH --nodes=2
 #SBATCH --gpus-per-node=2
 #SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=48
 #SBATCH --ntasks-per-node=1
-# SBATCH --mem-per-gpu=10G
-# SBATCH --exclusive
+#SBATCH --mem-per-gpu=10G
+#SBATCH --exclusive
 
 echo "DEBUG: SLURM_SUBMIT_DIR: $SLURM_SUBMIT_DIR"
 echo "DEBUG: SLURM_JOB_ID: $SLURM_JOB_ID"
