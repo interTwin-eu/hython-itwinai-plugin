@@ -171,6 +171,9 @@ ray_checkpoints/
 slurm_scripts/
 plots/
 
+# configuration files
+configuration_files/
+
 py_spy_profiling_output.svg
 core.jwb*
 *.err
