@@ -82,12 +82,10 @@ train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
   frac_space: 0.01
-  frac_space: 0.01
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.01
   frac_space: 0.01
 
 test_downsampler: null

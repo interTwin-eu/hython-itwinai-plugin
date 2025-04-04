@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from timeit import default_timer
@@ -9,12 +10,13 @@ import torch
 from hydra.utils import instantiate
 from ray import train
 from torch import nn
+from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from hython.metrics import MetricCollection, MSEMetric
+from hython.metrics import MetricCollection
 from hython.models import ModelLogAPI
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
@@ -31,6 +33,8 @@ from itwinai.torch.distributed import (
 from itwinai.torch.trainer import TorchTrainer
 
 from .config import HythonConfiguration
+
+py_logger = logging.getLogger(__name__)
 
 
 class RNNDistributedTrainer(TorchTrainer):
@@ -61,7 +65,7 @@ class RNNDistributedTrainer(TorchTrainer):
         name (str | None, optional): trainer custom name. Defaults to None.
     """
     config: HythonConfiguration
-    lr_scheduler: ReduceLROnPlateau | None = None
+    lr_scheduler: ReduceLROnPlateau
     model: nn.Module
     loss: _Loss
     optimizer: Optimizer
@@ -80,10 +84,8 @@ class RNNDistributedTrainer(TorchTrainer):
         name: str | None = None,
         **kwargs,
     ) -> None:
-        # convert config to HythonConfiguration
-        config = HythonConfiguration(**config)  # type: ignore
         super().__init__(
-            config=config,
+            config=HythonConfiguration(**config),
             epochs=epochs,
             model=model,
             strategy=strategy,
@@ -96,16 +98,17 @@ class RNNDistributedTrainer(TorchTrainer):
             **kwargs,
         )
         metrics = {}
-        metrics["MSEMetric"] = MSEMetric()
+        metrics["MSEMetric"] = instantiate({"metric_fn": self.config.metric_fn})["metric_fn"]
         self.metrics = metrics
         self.epoch_preds = None
         self.epoch_targets = None
         self.epoch_valid_masks = None
+        # store local vars as attributes
         self.save_parameters(**self.locals2params(locals()))
         # returns the model class def in config
         self.model_class = get_hython_model(model)
         self.model_class_name = model
-        self.model_dict = {}
+        # self.model_dict = {}
 
     @suppress_workers_print
     # @profile_torch_trainer
@@ -131,17 +134,6 @@ class RNNDistributedTrainer(TorchTrainer):
             Tuple[Dataset, Dataset, Dataset, Any]: training, validation, test datasets and
                 any additional information
         """
-
-        self.config.loss_fn = instantiate({"loss_fn": self.config.loss_fn})["loss_fn"]
-        self.config.metric_fn = instantiate({"metric_fn": self.config.metric_fn})["metric_fn"]
-        self.model_api = ModelLogAPI(self.config)
-
-        if self.config.hython_trainer == "rnntrainer":
-            # LOAD MODEL
-            self.model_logger = self.model_api.get_model_logger("model")
-            self.model = self.model_class(self.config)
-            if self.model is None:
-                raise ValueError("Model could not be instantiated")
 
         # TODO: adjust caltrainer to work with Ray TorchTrainer
         # elif self.config.hython_trainer == "caltrainer":
@@ -186,13 +178,10 @@ class RNNDistributedTrainer(TorchTrainer):
         #     )
 
         #     self.hython_trainer = CalTrainer(self.config)
-        else:
-            raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
 
-        self.optimizer = get_optimizer(self.model, self.config)
-        self.lr_scheduler = get_lr_scheduler(self.optimizer, self.config)
-        self._set_target_weights()
-
+        # print(f"PARAMS:{sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
         return super().execute(train_dataset, validation_dataset, test_dataset)
 
     def _set_loss_from_config(self) -> None:
@@ -283,12 +272,8 @@ class RNNDistributedTrainer(TorchTrainer):
         (self.model, self.optimizer, lr_scheduler) = self.strategy.distributed(
             self.model,
             self.optimizer,
+            # ! -> not _LRScheduler but ReduceLROnPlateau
             self.lr_scheduler,  # type: ignore
-        ) = self.strategy.distributed(
-            model=self.model,
-            optimizer=self.optimizer,
-            # not LRScheduler (metric dependent step function)
-            lr_scheduler=self.lr_scheduler,  # type: ignore
             **distribute_kwargs,
         )
         py_logger.info("Model, optimizer, and scheduler distributed")
