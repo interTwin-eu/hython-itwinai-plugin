@@ -16,7 +16,7 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from hython.metrics import MetricCollection
+from hython.metrics import MetricCollection, MSEMetric
 from hython.models import ModelLogAPI
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
@@ -98,7 +98,7 @@ class RNNDistributedTrainer(TorchTrainer):
             **kwargs,
         )
         metrics = {}
-        metrics["MSEMetric"] = instantiate({"metric_fn": self.config.metric_fn})["metric_fn"]
+        metrics["MSEMetric"] = MSEMetric()
         self.metrics = metrics
         self.epoch_preds = None
         self.epoch_targets = None
