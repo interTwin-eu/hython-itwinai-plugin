@@ -87,7 +87,7 @@ ipython_config.py
 #   intended to run in multiple environments; otherwise, check them in:
 # .python-version
 
-# pipenv
+# pipencore.jwb0129.juwels.611118v
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
 #   However, in case of collaboration, if having platform-specific dependencies or dependencies
 #   having no cross-platform support, pipenv may install dependencies that don't work, or not
@@ -169,3 +169,13 @@ horovod_ds_installation.err
 horovod_ds_installation.out
 ray_checkpoints/
 slurm_scripts/
+plots/
+
+py_spy_profiling_output.svg
+core.jwb*
+*.err
+*.out
+*.log
+*.err
+*.out
+*.log
