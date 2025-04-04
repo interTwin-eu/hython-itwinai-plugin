@@ -634,8 +634,8 @@ class RNNDistributedTrainer(TorchTrainer):
     def _setup_metrics(self) -> None:
         """Move metrics to current device."""
         pass
-        #for m_name, metric in self.metrics.items():
-            #self.metrics[m_name] = metric.to(self.device)
+        # for m_name, metric in self.metrics.items():
+        #     self.metrics[m_name] = metric.to(self.device)
 
     # @profile_torch_trainer
     # @measure_gpu_utilization
