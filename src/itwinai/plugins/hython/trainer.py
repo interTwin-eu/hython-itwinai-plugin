@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 from pathlib import Path
 from timeit import default_timer
 from typing import Any, Dict, List, Literal, Tuple
@@ -33,6 +34,7 @@ from itwinai.torch.distributed import (
 from itwinai.torch.trainer import TorchTrainer
 
 from .config import HythonConfiguration
+from .data import prepare_batch_for_device
 
 py_logger = logging.getLogger(__name__)
 
@@ -77,13 +79,14 @@ class RNNDistributedTrainer(TorchTrainer):
         model: str,
         strategy: Literal["ddp", "deepspeed", "horovod"] | None = "ddp",
         test_every: int | None = None,
-        random_seed: int | None = None,
         logger: Logger | None = None,
         checkpoints_location: str = "checkpoints",
         checkpoint_every: int | None = None,
         name: str | None = None,
+        random_seed: int | None = None,
         **kwargs,
     ) -> None:
+        py_logger.info(f"random_seed: {random_seed}")
         super().__init__(
             config=HythonConfiguration(**config),
             epochs=epochs,
@@ -437,7 +440,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 n = torch.ones_like(iypred["mu"])
 
             w: float = target_weight[target_name]
-            # ! Should not be needed, as we do not run distributed trials!
+            # ! Should not be needed, as we do not set multiple gpus per worker!
             # check if ray is running before
             # if ray_cluster_is_running():
             #     for key, value in iypred.items():
@@ -539,25 +542,26 @@ class RNNDistributedTrainer(TorchTrainer):
         running_batch_loss = 0
         data_points = 0
         for data in dataloader:
+            # Use our custom utility to prepare the batch for the correct device
+            data = prepare_batch_for_device(data, device, self.strategy)
+
             batch_temporal_loss = 0
 
-            for t in self.time_index:  # time_index could be a subset of time indices
-                # filter sequence
-                dynamic_bt = data["xd"][:, t : (t + self.config.seq_length)].to(device)
-                targets_bt = data["y"][:, t : (t + self.config.seq_length)].to(device)
+            for t in self.time_index:
+                # Now no need for additional .to(device) calls since data is already on correct device
+                dynamic_bt = data["xd"][:, t:(t + self.config.seq_length)]
+                targets_bt = data["y"][:, t:(t + self.config.seq_length)]
 
                 # static --> dynamic size (repeat time dim)
-                static_bt = (
-                    data["xs"].unsqueeze(1).repeat(1, dynamic_bt.size(1), 1).to(device)
-                )
+                static_bt = data["xs"].unsqueeze(1).repeat(1, dynamic_bt.size(1), 1)
 
-                x_concat = torch.cat(
-                    (dynamic_bt, static_bt),
-                    dim=-1,
-                )
+                x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
+
+                # Debug prints - can be removed later
+                # print(f"x_concat device: {x_concat.device}")
+                # print(f"model device: {next(model.parameters()).device}")
 
                 pred = model(x_concat)
-
                 output = self.predict_step(pred, steps=self.config.predict_steps)
                 target = self.target_step(targets_bt, steps=self.config.predict_steps)
 
@@ -649,7 +653,14 @@ class RNNDistributedTrainer(TorchTrainer):
         # Tracking epoch times for scaling test
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
-            num_nodes = int(os.environ.get("SLURM_NNODES", "unk"))
+            try:
+                num_nodes = int(os.environ.get("SLURM_NNODES"))  # type: ignore
+            except Exception:
+                raise ValueError(
+                    f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
+                    "Make sure SLURM_NNODES is set properly."
+                    )
+
             epoch_time_output_dir = Path("scalability-metrics/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
@@ -741,8 +752,15 @@ class RNNDistributedTrainer(TorchTrainer):
 
             epoch_time = default_timer() - epoch_start_time
             epoch_time_tracker.add_epoch_time(epoch + 1, epoch_time)
+            before_t=time.time()
             train.report({"loss": avg_val_loss.item(), "train_loss": train_loss.item()})
-
+            after_t=time.time()
+            self.log(
+                item=after_t-before_t,
+                identifier="report_time",
+                kind="metric",
+                step=epoch,
+            )
         if self.strategy.is_main_worker:
             epoch_time_tracker.save()
             self.model.load_state_dict(best_model)
@@ -815,7 +833,7 @@ class RNNDistributedTrainer(TorchTrainer):
             pin_memory=self.config.pin_gpu_memory,
             generator=self.torch_rng,
             sampler=train_sampler,
-            drop_last=True,
+            drop_last=False,
         )  # INFO: drop_last=True, throws errors for samples < batch size, as empty then
         # (can happen for strong downsampling)
 

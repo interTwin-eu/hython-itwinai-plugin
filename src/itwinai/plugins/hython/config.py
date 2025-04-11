@@ -23,6 +23,7 @@ class HythonConfiguration(TrainingConfiguration):
     model_head_layer: str | None = None
     loss_fn: Any
     metric_fn: Any
+    seed: int | None = None
     model_path: str | None = None
     model_head_activation: str
     model_head_kwargs: Dict[str, Any] = {}

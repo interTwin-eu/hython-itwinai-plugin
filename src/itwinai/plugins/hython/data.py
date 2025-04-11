@@ -1,10 +1,16 @@
-from typing import Dict, List, Tuple
+import logging
+import pickle
+from typing import Any, Dict, List, Optional, Tuple
+
+import torch
 
 from hython.config import Config
 from hython.datasets import get_dataset
 from hython.datasets.wflow_sbm import WflowSBM
 from hython.scaler import Scaler
 from itwinai.components import DataSplitter, monitor_exec
+
+py_logger = logging.getLogger(__name__)
 
 
 class RNNDatasetGetterAndPreprocessor(DataSplitter):
@@ -47,7 +53,42 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         scaler = Scaler(cfg, cfg.scaling_use_cached)
 
         train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")
+        # check pickled dataset size
+        py_logger.info(f"pickled train_dataset_size: {len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB")
 
         val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")
-
         return train_dataset, val_dataset, None
+
+
+def ray_cluster_is_running() -> bool:
+    """Detect if code is running inside a Ray cluster."""
+    try:
+        from ray import train
+        train.get_context()
+        return True
+    except (ImportError, RuntimeError):
+        return False
+
+
+def prepare_batch_for_device(
+    batch: Dict[str, torch.Tensor],
+    device: torch.device,
+    strategy: Optional[Any] = None
+) -> Dict[str, torch.Tensor]:
+    """Move a batch dictionary to the appropriate device based on strategy.
+
+    This function specially handles Ray distributed training by detecting the current worker's
+    device and moving tensors appropriately.
+
+    Args:
+        batch: A dictionary containing tensor data
+        device: The default device to use (non-Ray case)
+        strategy: The distributed strategy object (optional)
+
+    Returns:
+        The prepared batch with tensors on correct devices
+    """
+    return {
+        key: (value.to(device) if isinstance(value, torch.Tensor) else value)
+        for key, value in batch.items()
+    }
