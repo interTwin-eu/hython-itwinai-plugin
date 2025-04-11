@@ -548,7 +548,8 @@ class RNNDistributedTrainer(TorchTrainer):
             batch_temporal_loss = 0
 
             for t in self.time_index:
-                # Now no need for additional .to(device) calls since data is already on correct device
+                # Now no need for additional .to(device) calls since data is already on
+                # the correct device
                 dynamic_bt = data["xd"][:, t:(t + self.config.seq_length)]
                 targets_bt = data["y"][:, t:(t + self.config.seq_length)]
 
@@ -752,9 +753,9 @@ class RNNDistributedTrainer(TorchTrainer):
 
             epoch_time = default_timer() - epoch_start_time
             epoch_time_tracker.add_epoch_time(epoch + 1, epoch_time)
-            before_t=time.time()
+            before_t = time.time()
             train.report({"loss": avg_val_loss.item(), "train_loss": train_loss.item()})
-            after_t=time.time()
+            after_t = time.time()
             self.log(
                 item=after_t-before_t,
                 identifier="report_time",
