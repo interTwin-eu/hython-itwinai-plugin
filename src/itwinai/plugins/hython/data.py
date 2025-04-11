@@ -1,6 +1,6 @@
 import logging
 import pickle
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 
@@ -73,7 +73,6 @@ def ray_cluster_is_running() -> bool:
 def prepare_batch_for_device(
     batch: Dict[str, torch.Tensor],
     device: torch.device,
-    strategy: Optional[Any] = None
 ) -> Dict[str, torch.Tensor]:
     """Move a batch dictionary to the appropriate device based on strategy.
 

@@ -304,7 +304,6 @@ class RNNDistributedTrainer(TorchTrainer):
         model: nn.Module,
         train_loader: DataLoader,
         val_loader: DataLoader,
-        device: torch.device,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor, Dict[str, torch.Tensor]]:
         """Train and validate the model.
 
@@ -323,14 +322,16 @@ class RNNDistributedTrainer(TorchTrainer):
         # set time indices for training
         self._set_dynamic_temporal_downsampling([train_loader, val_loader])
         train_loss, train_metric = self.epoch_step(
-            model, train_loader, device, opt=self.optimizer
+            model, train_loader, opt=self.optimizer
         )
         model.eval()
         with torch.no_grad():
             # ? why is this running twice?
             # set time indices for validation
             # self._set_dynamic_temporal_downsampling([train_loader, val_loader])
-            val_loss, val_metric = self.epoch_step(model, val_loader, device, opt=None)
+            val_loss, val_metric = self.epoch_step(
+                model, val_loader, opt=None
+                )
 
         return train_loss, train_metric, val_loss, val_metric
 
@@ -381,8 +382,15 @@ class RNNDistributedTrainer(TorchTrainer):
             mask_cpu = mask
 
         if self.epoch_preds is None:
-            self.epoch_preds = pred_cpu
-            self.epoch_targets = target_cpu
+            # Pre-allocate memory for results
+            batch_size = (
+                prediction["y_hat"].size(0)
+                if "y_hat" in prediction
+                else prediction["mu"].size(0)
+            )
+            expected_samples = len(self.train_loader) * batch_size
+            self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
+            self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
             self.epoch_valid_masks = mask_cpu
         else:
             arrays = [self.epoch_preds, pred_cpu]
@@ -418,7 +426,7 @@ class RNNDistributedTrainer(TorchTrainer):
         """
         # Compute targets weighted loss. In case only one target, weight is 1
         # pred and target can be (N, C) or (N, T, C) depending on how the model is trained.
-        loss = torch.tensor(0.0, device=target.device)
+        loss = torch.tensor(0.0, device=self.strategy.device())
         for i, target_name in enumerate(target_weight):
 
             iypred = {}
@@ -518,6 +526,9 @@ class RNNDistributedTrainer(TorchTrainer):
             new_metrics[itarget] = {
                 self.metrics.__class__.__name__: metrics[itarget]
             }
+        # new_metrics = {
+        #     'vwc': {'MSEMetric': 0.16305912}
+        # }
 
         return new_metrics
 
@@ -525,7 +536,6 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         model: nn.Module,
         dataloader: DataLoader,
-        device: torch.device,
         opt: Optimizer | None = None,
     ) -> Tuple[Any, Dict[str, Any]]:
         """Run one epoch of the model.
@@ -539,28 +549,34 @@ class RNNDistributedTrainer(TorchTrainer):
         Returns:
             Tuple[Any, Dict[str, Any]]: loss, metric
         """
+        # Pre-compute time indices once at the start of epoch
+        time_indices = torch.tensor(self.time_index, device=self.strategy.device())
+
         running_batch_loss = 0
         data_points = 0
+        data_load_time = 0
+        compute_time = 0
         for data in dataloader:
-            # Use our custom utility to prepare the batch for the correct device
-            data = prepare_batch_for_device(data, device, self.strategy)
+            start_load = time.time()
+            data = prepare_batch_for_device(data, self.strategy.device())
+            data_load_time += time.time() - start_load
 
-            batch_temporal_loss = 0
+            start_compute = time.time()
+            # Process all time steps in parallel if possible
+            all_losses = []
 
-            for t in self.time_index:
-                # Now no need for additional .to(device) calls since data is already on
-                # the correct device
-                dynamic_bt = data["xd"][:, t:(t + self.config.seq_length)]
-                targets_bt = data["y"][:, t:(t + self.config.seq_length)]
+            # Process in chunks to avoid memory issues
+            chunk_size = 10  # Tune this based on your GPU memory
+            for t_chunk in torch.split(time_indices, chunk_size):
+                # Process multiple timesteps at once
+                dynamic_bt = data["xd"].index_select(1, t_chunk)
+                targets_bt = data["y"].index_select(1, t_chunk)
 
-                # static --> dynamic size (repeat time dim)
-                static_bt = data["xs"].unsqueeze(1).repeat(1, dynamic_bt.size(1), 1)
+                # Optimize static data handling
+                static_bt = data["xs"].unsqueeze(1).expand(-1, len(t_chunk), -1)
 
+                # Single concatenation for the chunk
                 x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
-
-                # Debug prints - can be removed later
-                # print(f"x_concat device: {x_concat.device}")
-                # print(f"model device: {next(model.parameters()).device}")
 
                 pred = model(x_concat)
                 output = self.predict_step(pred, steps=self.config.predict_steps)
@@ -568,6 +584,7 @@ class RNNDistributedTrainer(TorchTrainer):
 
                 self._concatenate_result(output, target)
 
+                # ! this is not batch loss, but sequence loss
                 batch_sequence_loss = self._compute_batch_loss(
                     prediction=output,
                     target=target,
@@ -575,18 +592,26 @@ class RNNDistributedTrainer(TorchTrainer):
                     target_weight=self.target_weights,
                 )
 
-                if opt is not None:
-                    self._backprop_loss(batch_sequence_loss, opt)
+                all_losses.append(batch_sequence_loss)
 
-                batch_temporal_loss += batch_sequence_loss.detach()
+            # Calculate mean loss regardless of whether we're training or validating
+            batch_loss = torch.mean(torch.stack(all_losses))
+
+            # Only do backprop during training
+            if opt is not None:
+                self._backprop_loss(batch_loss, opt)
+
+            compute_time += time.time() - start_compute
 
             data_points += data["xd"].size(0)
-
-            running_batch_loss += batch_temporal_loss
+            running_batch_loss += batch_loss.detach()
 
         epoch_loss = running_batch_loss / data_points
-
         metric = self._compute_metric()
+
+        if self.strategy.is_main_worker:
+            py_logger.info(f"Data loading took: {data_load_time:.2f}s")
+            py_logger.info(f"Computation took: {compute_time:.2f}s")
 
         return epoch_loss, metric
 
@@ -672,7 +697,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 num_nodes=num_nodes,
             )
 
-        device = self.strategy.device()
         loss_history = {"train": [], "val": []}
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
@@ -690,11 +714,13 @@ class RNNDistributedTrainer(TorchTrainer):
                 val_loss,
                 val_metric,
             ) = self.train_valid_epoch(
-                self.model, self.train_loader, self.val_loader, device
-            )
+                self.model, self.train_loader, self.val_loader)
 
             # gather losses from each worker and place them on the main worker.
+            before_gather = time.time()
             worker_val_losses = self.strategy.gather(val_loss, dst_rank=0)
+            after_gather = time.time()
+            py_logger.info(f"Gather took: {after_gather - before_gather:.2f}s")
             if not self.strategy.is_main_worker:
                 continue
 
@@ -704,8 +730,7 @@ class RNNDistributedTrainer(TorchTrainer):
             if not all(isinstance(loss, torch.Tensor) for loss in worker_val_losses):
                 raise ValueError("Worker val losses are not all tensors")
 
-            # Moving them all to the cpu() before performing calculations
-            avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
+            avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach()
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step(avg_val_loss)  # type: ignore ->
             loss_history["train"].append(train_loss)
@@ -762,6 +787,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 kind="metric",
                 step=epoch,
             )
+
         if self.strategy.is_main_worker:
             epoch_time_tracker.save()
             self.model.load_state_dict(best_model)
@@ -831,7 +857,9 @@ class RNNDistributedTrainer(TorchTrainer):
             dataset=train_dataset,
             batch_size=batch_size,
             num_workers=self.config.num_workers_dataloader,
-            pin_memory=self.config.pin_gpu_memory,
+            pin_memory=True,
+            prefetch_factor=2,
+            persistent_workers=True,  # Keep workers alive between iterations
             generator=self.torch_rng,
             sampler=train_sampler,
             drop_last=False,
