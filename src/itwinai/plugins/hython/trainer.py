@@ -3,7 +3,7 @@ import os
 import time
 from pathlib import Path
 from timeit import default_timer
-from typing import Any, Dict, List, Literal, Tuple
+from typing import Any, Dict, Literal, Tuple
 
 import numpy as np
 import pandas as pd
@@ -71,6 +71,8 @@ class RNNDistributedTrainer(TorchTrainer):
     model: nn.Module
     loss: _Loss
     optimizer: Optimizer
+    train_time_range: int = 0
+    val_time_range: int = 0
 
     def __init__(
         self,
@@ -320,7 +322,13 @@ class RNNDistributedTrainer(TorchTrainer):
         """
         model.train()
         # set time indices for training
-        self._set_dynamic_temporal_downsampling([train_loader, val_loader])
+        dynamic_downsampling_start = time.time()
+        self._set_dynamic_temporal_downsampling(opt=self.optimizer)
+        dynamic_downsampling_end = time.time()
+        py_logger.debug(
+            f"Dynamic downsampling took: "
+            f"{dynamic_downsampling_end - dynamic_downsampling_start:.2f}s"
+        )
         train_loss, train_metric = self.epoch_step(
             model, train_loader, opt=self.optimizer
         )
@@ -328,7 +336,7 @@ class RNNDistributedTrainer(TorchTrainer):
         with torch.no_grad():
             # ? why is this running twice?
             # set time indices for validation
-            # self._set_dynamic_temporal_downsampling([train_loader, val_loader])
+            self._set_dynamic_temporal_downsampling(opt=None)
             val_loss, val_metric = self.epoch_step(
                 model, val_loader, opt=None
                 )
@@ -516,11 +524,11 @@ class RNNDistributedTrainer(TorchTrainer):
             self.epoch_valid_masks,
         )
         if isinstance(self.metrics, MetricCollection):
-            py_logger.info("Metric is a MetricCollection")
+            py_logger.debug("Metric is a MetricCollection")
             return metrics
         else:
-            py_logger.info(f"Metric is {self.metrics.__class__.__name__}")
-        py_logger.info(f"Metrics: {metrics}")
+            py_logger.debug(f"Metric is {self.metrics.__class__.__name__}")
+        py_logger.debug(f"Metrics: {metrics}")
         new_metrics = {}
         for itarget in metrics:
             new_metrics[itarget] = {
@@ -538,37 +546,36 @@ class RNNDistributedTrainer(TorchTrainer):
         dataloader: DataLoader,
         opt: Optimizer | None = None,
     ) -> Tuple[Any, Dict[str, Any]]:
-        """Run one epoch of the model.
-
-        Args:
-            model (nn.Module): model
-            dataloader (DataLoader): dataloader
-            device (torch.device): device
-            opt (Optimizer | None, optional): optimizer. Defaults to None.
-
-        Returns:
-            Tuple[Any, Dict[str, Any]]: loss, metric
-        """
+        """Run one epoch of the model."""
         # Pre-compute time indices once at the start of epoch
         time_indices = torch.tensor(self.time_index, device=self.strategy.device())
 
         running_batch_loss = 0
         data_points = 0
+
+        # Time tracking
         data_load_time = 0
         compute_time = 0
+        data_prep_time = 0
+        inference_time = 0
+        predict_time = 0
+        target_time = 0
+        loss_time = 0
+        concat_time = 0
+
         for data in dataloader:
             start_load = time.time()
             data = prepare_batch_for_device(data, self.strategy.device())
             data_load_time += time.time() - start_load
-
             start_compute = time.time()
             # Process all time steps in parallel if possible
             all_losses = []
 
             # Process in chunks to avoid memory issues
-            chunk_size = 10  # Tune this based on your GPU memory
+            chunk_size = 5  # Tune this based on your GPU memory
             for t_chunk in torch.split(time_indices, chunk_size):
-                # Process multiple timesteps at once
+                start_prep = time.time()
+                    # Process multiple timesteps at once
                 dynamic_bt = data["xd"].index_select(1, t_chunk)
                 targets_bt = data["y"].index_select(1, t_chunk)
 
@@ -577,13 +584,25 @@ class RNNDistributedTrainer(TorchTrainer):
 
                 # Single concatenation for the chunk
                 x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
+                data_prep_time += time.time() - start_prep
 
+                start_inference = time.time()
                 pred = model(x_concat)
+                inference_time += time.time() - start_inference
+
+                start_predict = time.time()
                 output = self.predict_step(pred, steps=self.config.predict_steps)
+                predict_time += time.time() - start_predict
+
+                start_target = time.time()
                 target = self.target_step(targets_bt, steps=self.config.predict_steps)
+                target_time += time.time() - start_target
 
+                start_concat = time.time()
                 self._concatenate_result(output, target)
+                concat_time += time.time() - start_concat
 
+                start_loss = time.time()
                 # ! this is not batch loss, but sequence loss
                 batch_sequence_loss = self._compute_batch_loss(
                     prediction=output,
@@ -591,7 +610,7 @@ class RNNDistributedTrainer(TorchTrainer):
                     valid_mask=None,
                     target_weight=self.target_weights,
                 )
-
+                loss_time += time.time() - start_loss
                 all_losses.append(batch_sequence_loss)
 
             # Calculate mean loss regardless of whether we're training or validating
@@ -612,54 +631,68 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.strategy.is_main_worker:
             py_logger.info(f"Data loading took: {data_load_time:.2f}s")
             py_logger.info(f"Computation took: {compute_time:.2f}s")
-
+            py_logger.info(f"Data preparation took: {data_prep_time:.2f}s")
+            py_logger.info(f"Inference took: {inference_time:.2f}s")
+            py_logger.info(f"Prediction took: {predict_time:.2f}s")
+            py_logger.info(f"Target took: {target_time:.2f}s")
+            py_logger.info(f"Loss took: {loss_time:.2f}s")
+            py_logger.info(f"Concat took: {concat_time:.2f}s")
         return epoch_loss, metric
 
     def _set_dynamic_temporal_downsampling(
         self,
-        data_loaders: List[DataLoader],
         opt: Optimizer | None = None,
     ) -> None:
-        """set the temporal indices of the timeseries, it may be a subset of the time
-            indices.
-
-        Args:
-            data_loaders (List[DataLoader]): data loaders
-            opt (Optimizer | None, optional): optimizer. Defaults to None.
-        """
+        """set the temporal indices of the timeseries"""
 
         try:
             temporal_downsampling = self.config.temporal_downsampling
         except Exception:
+            py_logger.info("Temporal downsampling is not set")
             temporal_downsampling = False
+
+        py_logger.debug("\n=== Setting temporal downsampling ===")
+        py_logger.debug(f"temporal_downsampling: {temporal_downsampling}")
+        py_logger.debug(f"opt is None: {opt is None}")
 
         if temporal_downsampling:
             if len(self.config.temporal_subset) > 1:
                 # use different time indices for training and validation
                 idx = -1 if opt is None else 0
-                # validation
-                time_range = next(iter(data_loaders[idx]))["xd"].shape[1]
+                # time_range = next(iter(self.train_loader))["xd"].shape[1]
+                time_range = self.val_time_range if opt is None else self.train_time_range
                 temporal_subset = self.config.temporal_subset[idx]
+
+                py_logger.debug("Multiple temporal subsets case:")
+                py_logger.debug(f"idx: {idx}")
+                py_logger.debug(f"time_range: {time_range}")
+                py_logger.debug(f"temporal_subset: {temporal_subset}")
+                py_logger.debug(f"seq_length: {self.config.seq_length}")
 
                 self.time_index = np.random.randint(
                     0, time_range - self.config.seq_length, temporal_subset
                 )
+
             else:
-                # use same time indices for training and validation, time indices are from
-                # train_loader
-                time_range = next(iter(data_loaders[0]))["xd"].shape[1]
+                # use same time indices for training and validation
+                time_range = self.train_time_range
+                py_logger.debug("Single temporal subset case:")
+                py_logger.debug(f"time_range: {time_range}")
+                py_logger.debug(f"temporal_subset: {self.config.temporal_subset[-1]}")
+
                 self.time_index = np.random.randint(
                     0, time_range - self.config.seq_length, self.config.temporal_subset[-1]
                 )
-
         else:
-            if opt is None:
-                # validation
-                time_range = next(iter(data_loaders[-1]))["xd"].shape[1]
-            else:
-                time_range = next(iter(data_loaders[0]))["xd"].shape[1]
+            time_range = self.val_time_range if opt is None else self.train_time_range
+            py_logger.debug("No temporal downsampling case:")
+            py_logger.debug(f"time_range: {time_range}")
 
             self.time_index = np.arange(0, time_range)
+
+        py_logger.debug(f"Generated time_index shape: {self.time_index.shape}")
+        py_logger.debug(f"Generated time_index max value: {self.time_index.max()}")
+        py_logger.debug(f"Generated time_index min value: {self.time_index.min()}")
 
     def _setup_metrics(self) -> None:
         """Move metrics to current device."""
@@ -858,14 +891,18 @@ class RNNDistributedTrainer(TorchTrainer):
             batch_size=batch_size,
             num_workers=self.config.num_workers_dataloader,
             pin_memory=True,
-            prefetch_factor=2,
+            prefetch_factor=4,
             persistent_workers=True,  # Keep workers alive between iterations
             generator=self.torch_rng,
             sampler=train_sampler,
-            drop_last=False,
+            drop_last=True,
         )  # INFO: drop_last=True, throws errors for samples < batch size, as empty then
         # (can happen for strong downsampling)
+        # check if train_dataset has different time ranges for different batches
 
+        self.train_time_range = next(iter(self.train_loader))['xd'].shape[1]
+
+        # Get sequence length from configuration
         if validation_dataset is not None:
             self.val_loader = self.strategy.create_dataloader(
                 dataset=validation_dataset,
@@ -874,6 +911,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 pin_memory=self.config.pin_gpu_memory,
                 generator=self.torch_rng,
                 sampler=val_sampler,
-                drop_last=False,
+                drop_last=True,
             )  # INFO: drop_last=True, throws errors for samples < batch size
             # (can happen for strong downsampling)
+            self.val_time_range = next(iter(self.val_loader))['xd'].shape[1]

@@ -19,7 +19,7 @@ experiment_run: "hython-plugin3"
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 run_id: "unnamed-run"
 
-train_temporal_range: ["2018-01-01", "2019-12-31"]
+train_temporal_range: ["2016-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
 test_temporal_range: ["2019-01-01", "2020-12-31"]
 
@@ -29,9 +29,9 @@ seed: 10
 
 model: CudaLSTM
 
-hidden_size: 64
+hidden_size: 256
 dropout: 0.2
-lstm_layers: 1
+lstm_layers: 4
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -64,9 +64,9 @@ seq_length: 180
 
 learning_rate: 0.001
 
-batch: 128
+batch: 512
 
-epochs: 10
+epochs: 20
 
 gradient_clip: null
 
@@ -197,7 +197,7 @@ training_pipeline:
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
-        num_workers_dataloader: 4
+        num_workers_dataloader: 5
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
         #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
@@ -236,7 +236,7 @@ training_pipeline:
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: False
+      measure_communication_overhead: True
       measure_epoch_time: True
       run_id: $(run_id)
       random_seed: ${seed}
