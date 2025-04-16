@@ -11,12 +11,11 @@ import torch
 from hydra.utils import instantiate
 from torch import nn
 from torch.nn.modules.loss import _Loss
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from hython.metrics import MetricCollection, MSEMetric
 from hython.models import ModelLogAPI
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
@@ -24,13 +23,10 @@ from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.distributed import suppress_workers_print
 from itwinai.loggers import EpochTimeTracker, Logger
 from itwinai.torch.distributed import (
-    DeepSpeedStrategy,
     HorovodStrategy,
     NonDistributedStrategy,
-    RayDDPStrategy,
-    TorchDDPStrategy,
 )
-from itwinai.torch.trainer import TorchTrainer
+from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
@@ -66,7 +62,7 @@ class RNNDistributedTrainer(TorchTrainer):
         name (str | None, optional): trainer custom name. Defaults to None.
     """
     config: HythonConfiguration
-    lr_scheduler: ReduceLROnPlateau
+    lr_scheduler: LRScheduler
     model: nn.Module
     loss: _Loss
     optimizer: Optimizer
@@ -75,7 +71,7 @@ class RNNDistributedTrainer(TorchTrainer):
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: Dict[str, Any],  # type: ignore
         epochs: int,
         model: str,
         strategy: Literal["ddp", "deepspeed", "horovod"] | None = "ddp",
@@ -87,9 +83,16 @@ class RNNDistributedTrainer(TorchTrainer):
         random_seed: int | None = None,
         **kwargs,
     ) -> None:
-        py_logger.info(f"random_seed: {random_seed}")
+        # Save for serialization
+        self.save_parameters(**self.locals2params(locals()))
+        config: HythonConfiguration = HythonConfiguration(**config)
+        metrics = {}
+        # setup hython mtrics
+        metrics[f"{config.metric_name}"] = instantiate(
+            {"metric_fn": config.metric_fn})["metric_fn"]
+
         super().__init__(
-            config=HythonConfiguration(**config),
+            config=config,
             epochs=epochs,
             model=model,
             strategy=strategy,
@@ -99,26 +102,16 @@ class RNNDistributedTrainer(TorchTrainer):
             checkpoints_location=checkpoints_location,
             checkpoint_every=checkpoint_every,
             name=name,
+            metrics=metrics,
             **kwargs,
         )
-        metrics = {}
-        metrics["MSEMetric"] = MSEMetric()
-        self.metrics = metrics
+        py_logger.info(f"random_seed: {random_seed}")
+        self.model_class = get_hython_model(model)
+        self.model_class_name = model
 
-        # set in concatenate_result
         self.epoch_preds = None
         self.epoch_targets = None
         self.epoch_valid_masks = None
-
-        # set in create_dataloaders
-        self.time_index = None
-
-        # store local vars as attributes
-        # self.save_parameters(**self.locals2params(locals()))
-        # returns the model class def in config
-        self.model_class = get_hython_model(model)
-        self.model_class_name = model
-        # self.model_dict = {}
 
     @suppress_workers_print
     # @profile_torch_trainer
@@ -194,8 +187,11 @@ class RNNDistributedTrainer(TorchTrainer):
         # print(f"PARAMS:{sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
         return super().execute(train_dataset, validation_dataset, test_dataset)
 
-    def _set_loss_from_config(self) -> None:
-        self.loss = instantiate({"loss_fn": self.config.loss_fn})["loss_fn"]
+    def _setup_metrics(self) -> None:
+        # TODO: Hython: Please make Metrics based on torchmetrics so they can be computed on
+        # TODO: GPU
+        # TODO: remove this override method when done
+        pass
 
     def _set_lr_scheduler_from_config(self) -> None:
         """Parse Lr scheduler from training config"""
@@ -244,109 +240,85 @@ class RNNDistributedTrainer(TorchTrainer):
         else:
             raise NotImplementedError
 
-        distribute_kwargs = {}
-        if isinstance(self.strategy, DeepSpeedStrategy):
-            # Batch size definition is not optional for DeepSpeedStrategy!
-            distribute_kwargs = {
-                "config_params": {"train_micro_batch_size_per_gpu": self.config.batch_size}
-            }
-        # if RayDDPStrategy, find_unused_parameters is not supported
-        elif isinstance(self.strategy, TorchDDPStrategy) and not isinstance(
-                self.strategy, RayDDPStrategy
-                ):
-            if "find_unused_parameters" not in self.config.model_fields:
-                self.config.find_unused_parameters = False
-            distribute_kwargs = {"find_unused_parameters": self.config.find_unused_parameters}
-
-        py_logger.info("Setting optimizer")
         self._set_optimizer_from_config()
-        py_logger.info("Optimizer set")
-        py_logger.info("Setting LR scheduler")
         self._set_lr_scheduler_from_config()
-        py_logger.info("LR scheduler set")
-        py_logger.info("Setting target weights")
-        self._set_target_weights()
-        py_logger.info("Target weights set")
-        py_logger.info("Setting loss")
-        # Parse loss from training configuration
-        # Loss can be changed with a custom one here!
-        self._set_loss_from_config()
-        py_logger.info("Loss set")
-        py_logger.info("Setting metrics")
-        self.metrics = instantiate({"metric_fn": self.config.metric_fn})["metric_fn"]
-        py_logger.info("Metrics set")
-        # IMPORTANT: model, optimizer, and scheduler need to be distributed from here on
 
+        if self.optimizer_state_dict:
+            self.optimizer.load_state_dict(self.optimizer_state_dict)
+
+        if self.lr_scheduler_state_dict and self.lr_scheduler:
+            self.lr_scheduler.load_state_dict(self.lr_scheduler_state_dict)
+
+        # set target weights for hython model
+        self._set_target_weights()
+        self._set_loss_from_config()
+
+        # IMPORTANT: model, optimizer, and scheduler need to be distributed from here on
         # Distributed model, optimizer, and scheduler
+        distribute_kwargs = self.get_default_distributed_kwargs()
         py_logger.info("Distributing model, optimizer, and scheduler")
         (self.model, self.optimizer, lr_scheduler) = self.strategy.distributed(
             self.model,
             self.optimizer,
-            # ! -> not _LRScheduler but ReduceLROnPlateau
+            # ! -> not _LRScheduler but LRScheduler
             self.lr_scheduler,  # type: ignore
             **distribute_kwargs,
         )
         py_logger.info("Model, optimizer, and scheduler distributed")
-        if lr_scheduler is not None:
-            # ! -> not _LRScheduler but ReduceLROnPlateau
-            self.lr_scheduler = lr_scheduler  # type: ignore
-        else:
-            py_logger.error("LR scheduler could not be set")
 
-    def set_epoch(self, epoch: int) -> None:
+    def _set_loss_from_config(self) -> None:
+        self.loss = instantiate({"loss_fn": self.config.loss_fn})["loss_fn"]
+
+    def set_epoch(self) -> None:
         """Set the epoch for the sampler.
 
         Args:
             epoch (int): epoch
         """
-        if self.profiler is not None:
+        if self.profiler is not None and self.current_epoch > 0:
             self.profiler.step()
 
-        if self.strategy.is_distributed:
-            self.train_loader.sampler.set_epoch(epoch)
-            self.val_loader.sampler.set_epoch(epoch)
+        if self.lr_scheduler:
+            self.lr_scheduler.step()
+        self._set_epoch_dataloaders(self.current_epoch)
 
-    def train_valid_epoch(
-        self,
-        model: nn.Module,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
-    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor, Dict[str, torch.Tensor]]:
-        """Train and validate the model.
-
-        Args:
-            model (nn.Module): model
-            train_loader (DataLoader): training loader
-            val_loader (DataLoader): validation loader
-            device (torch.device): device
+    def train_epoch(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Train the model.
 
         Returns:
-            Tuple[torch.Tensor, Dict[str, torch.Tensor],
-            torch.Tensor, Dict[str, torch.Tensor]]:
-                training loss, training metric, validation loss, validation metric
+            Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+                training loss, training metric
         """
-        model.train()
+        self.model.train()
         # set time indices for training
-        dynamic_downsampling_start = time.time()
-        self._set_dynamic_temporal_downsampling(opt=self.optimizer)
-        dynamic_downsampling_end = time.time()
-        py_logger.debug(
-            f"Dynamic downsampling took: "
-            f"{dynamic_downsampling_end - dynamic_downsampling_start:.2f}s"
+        self._time_and_log(
+            lambda: self._set_dynamic_temporal_downsampling(opt=self.optimizer),
+            "set_dynamic_temporal_downsampling_train_s",
+            step=self.current_epoch,
         )
+        if self.train_dataloader is None:
+            raise ValueError("Train dataloader is None")
         train_loss, train_metric = self.epoch_step(
-            model, train_loader, opt=self.optimizer
+            self.model, self.train_dataloader, opt=self.optimizer
         )
-        model.eval()
-        with torch.no_grad():
-            # ? why is this running twice?
-            # set time indices for validation
-            self._set_dynamic_temporal_downsampling(opt=None)
-            val_loss, val_metric = self.epoch_step(
-                model, val_loader, opt=None
-                )
+        return train_loss, train_metric
 
-        return train_loss, train_metric, val_loss, val_metric
+    def validation_epoch(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        self.model.eval()
+        with torch.no_grad():
+            # set time indices for validation
+            self._time_and_log(
+                lambda: self._set_dynamic_temporal_downsampling(opt=None),
+                "set_dynamic_temporal_downsampling_val_s",
+                step=self.current_epoch,
+            )
+            if self.validation_dataloader is None:
+                raise ValueError("Validation dataloader is None")
+            val_loss, val_metric = self.epoch_step(
+                self.model, self.validation_dataloader, opt=None
+            )
+
+        return val_loss, val_metric
 
     def target_step(self, target: torch.Tensor, steps: int = 1) -> torch.Tensor:
         selection = get_temporal_steps(steps)
@@ -401,7 +373,9 @@ class RNNDistributedTrainer(TorchTrainer):
                 if "y_hat" in prediction
                 else prediction["mu"].size(0)
             )
-            expected_samples = len(self.train_loader) * batch_size
+            if self.train_dataloader is None:
+                raise ValueError("Train dataloader is None")
+            expected_samples = len(self.train_dataloader) * batch_size
             self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
             self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
             self.epoch_valid_masks = mask_cpu
@@ -516,32 +490,33 @@ class RNNDistributedTrainer(TorchTrainer):
 
             opt.step()
 
-    def _compute_metric(self) -> Dict[str, Any]:
+    def compute_metrics(self) -> Dict[str, Any]:
         """Compute the metric by the object's metric function.
 
         Returns:
-            Dict[str, Any]: metric
+            Dict[str, Any]: metric in format {'target_name': {'metric_name': value}}
         """
-        metrics = self.metrics(
-            self.epoch_targets,  # type: ignore
-            self.epoch_preds,
-            self.config.target_variables,
-            self.epoch_valid_masks,
-        )
-        if isinstance(self.metrics, MetricCollection):
-            py_logger.debug("Metric is a MetricCollection")
-            return metrics
-        else:
-            py_logger.debug(f"Metric is {self.metrics.__class__.__name__}")
-        py_logger.debug(f"Metrics: {metrics}")
         new_metrics = {}
-        for itarget in metrics:
-            new_metrics[itarget] = {
-                self.metrics.__class__.__name__: metrics[itarget]
-            }
-        # new_metrics = {
-        #     'vwc': {'MSEMetric': 0.16305912}
-        # }
+        for name, metric in self.metrics.items():
+            computed_metrics = metric(
+                self.epoch_targets,  # type: ignore
+                self.epoch_preds,
+                self.config.target_variables,
+                self.epoch_valid_masks,
+            )
+            # computed_metrics will have format {'target_name': value}
+            for target_name, metric_value in computed_metrics.items():
+                # Initialize nested dict if target_name not present
+                if target_name not in new_metrics:
+                    new_metrics[target_name] = {}
+                # Add the metric value with the metric name as key
+                new_metrics[target_name][name] = metric_value
+
+        py_logger.debug(f"Metrics: {new_metrics}")
+        # reset
+        self.epoch_preds = None
+        self.epoch_targets = None
+        self.epoch_valid_masks = None
 
         return new_metrics
 
@@ -558,7 +533,7 @@ class RNNDistributedTrainer(TorchTrainer):
         running_batch_loss = 0
         data_points = 0
 
-        # Time tracking
+        # TODO: remove Time tracking
         data_load_time = 0
         compute_time = 0
         data_prep_time = 0
@@ -568,55 +543,53 @@ class RNNDistributedTrainer(TorchTrainer):
         loss_time = 0
         concat_time = 0
 
-        for data in dataloader:
+        for batch in dataloader:
             start_load = time.time()
-            data = prepare_batch_for_device(data, self.strategy.device())
+            batch = prepare_batch_for_device(batch, self.strategy.device())
             data_load_time += time.time() - start_load
             start_compute = time.time()
             # Process all time steps in parallel if possible
             all_losses = []
 
             # Process in chunks to avoid memory issues
-            chunk_size = 5  # Tune this based on your GPU memory
-            for t_chunk in torch.split(time_indices, chunk_size):
-                start_prep = time.time()
-                # Process multiple timesteps at once
-                dynamic_bt = data["xd"].index_select(1, t_chunk)
-                targets_bt = data["y"].index_select(1, t_chunk)
+            start_prep = time.time()
+            # Process multiple timesteps at once
+            dynamic_bt = batch["xd"].index_select(1, time_indices)
+            targets_bt = batch["y"].index_select(1, time_indices)
 
-                # Optimize static data handling
-                static_bt = data["xs"].unsqueeze(1).expand(-1, len(t_chunk), -1)
+            # Optimize static data handling
+            static_bt = batch["xs"].unsqueeze(1).expand(-1, len(time_indices), -1)
 
-                # Single concatenation for the chunk
-                x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
-                data_prep_time += time.time() - start_prep
+            # Single concatenation for the chunk
+            x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
+            data_prep_time += time.time() - start_prep
 
-                start_inference = time.time()
-                pred = model(x_concat)
-                inference_time += time.time() - start_inference
+            start_inference = time.time()
+            pred = model(x_concat)
+            inference_time += time.time() - start_inference
 
-                start_predict = time.time()
-                output = self.predict_step(pred, steps=self.config.predict_steps)
-                predict_time += time.time() - start_predict
+            start_predict = time.time()
+            output = self.predict_step(pred, steps=self.config.predict_steps)
+            predict_time += time.time() - start_predict
 
-                start_target = time.time()
-                target = self.target_step(targets_bt, steps=self.config.predict_steps)
-                target_time += time.time() - start_target
+            start_target = time.time()
+            target = self.target_step(targets_bt, steps=self.config.predict_steps)
+            target_time += time.time() - start_target
 
-                start_concat = time.time()
-                self._concatenate_result(output, target)
-                concat_time += time.time() - start_concat
+            start_concat = time.time()
+            self._concatenate_result(output, target)
+            concat_time += time.time() - start_concat
 
-                start_loss = time.time()
-                # ! this is not batch loss, but sequence loss
-                batch_sequence_loss = self._compute_batch_loss(
-                    prediction=output,
-                    target=target,
-                    valid_mask=None,
-                    target_weight=self.target_weights,
-                )
-                loss_time += time.time() - start_loss
-                all_losses.append(batch_sequence_loss)
+            start_loss = time.time()
+            # ! this is not batch loss, but sequence loss
+            batch_sequence_loss = self._compute_batch_loss(
+                prediction=output,
+                target=target,
+                valid_mask=None,
+                target_weight=self.target_weights,
+            )
+            loss_time += time.time() - start_loss
+            all_losses.append(batch_sequence_loss)
 
             # Calculate mean loss regardless of whether we're training or validating
             batch_loss = torch.mean(torch.stack(all_losses))
@@ -627,11 +600,11 @@ class RNNDistributedTrainer(TorchTrainer):
 
             compute_time += time.time() - start_compute
 
-            data_points += data["xd"].size(0)
+            data_points += batch["xd"].size(0)
             running_batch_loss += batch_loss.detach()
 
         epoch_loss = running_batch_loss / len(dataloader)
-        metric = self._compute_metric()
+        metric = self.compute_metrics()
 
         if self.strategy.is_main_worker:
             py_logger.debug(f"Data loading took: {data_load_time:.2f}s")
@@ -664,7 +637,6 @@ class RNNDistributedTrainer(TorchTrainer):
             if len(self.config.temporal_subset) > 1:
                 # use different time indices for training and validation
                 idx = -1 if opt is None else 0
-                # time_range = next(iter(self.train_loader))["xd"].shape[1]
                 time_range = self.val_time_range if opt is None else self.train_time_range
                 temporal_subset = self.config.temporal_subset[idx]
 
@@ -699,21 +671,14 @@ class RNNDistributedTrainer(TorchTrainer):
         py_logger.debug(f"Generated time_index max value: {self.time_index.max()}")
         py_logger.debug(f"Generated time_index min value: {self.time_index.min()}")
 
-    def _setup_metrics(self) -> None:
-        """Move metrics to current device."""
-        pass
-        # for m_name, metric in self.metrics.items():
-        #     self.metrics[m_name] = metric.to(self.device)
-
     # @profile_torch_trainer
     # @measure_gpu_utilization
-    def train(self) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def train(self) -> None:
         """Override train_val version of hython to support distributed strategy.
 
         Returns:
-            Tuple[Dict[str, Any], Dict[str, Any]]: loss history, metric history
+            None
         """
-        # self.enable_remote_debugging()
         # Tracking epoch times for scaling test
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
@@ -735,58 +700,55 @@ class RNNDistributedTrainer(TorchTrainer):
                 num_nodes=num_nodes,
             )
 
-        loss_history = {"train": [], "val": []}
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
+        # add empty validation metrics
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
 
         best_loss = float("inf")
-        for epoch in tqdm(range(self.epochs)):
+        progress_bar = tqdm(
+            range(self.current_epoch, self.epochs),
+            desc="Epochs",
+            disable=self.disable_tqdm or not self.strategy.is_main_worker,
+        )
+        for self.current_epoch in progress_bar:
             epoch_start_time = default_timer()
-            self.set_epoch(epoch)
-            if self.model is None:
-                raise ValueError("Model is not set")
-            # run train_valid epoch step of hython trainer
-            (
-                train_loss,
-                train_metric,
-                val_loss,
-                val_metric,
-            ) = self.train_valid_epoch(
-                self.model, self.train_loader, self.val_loader)
+            progress_bar.set_description(f"Epoch {self.current_epoch + 1}/{self.epochs}")
+            self.set_epoch()
+            # run train and validation epoch step of hython trainer
+            train_loss, train_metric = self.train_epoch()
+            val_loss, val_metric = self.validation_epoch()
+
+            # ! TODO: In hython, make loss serializable, before being able to save checkpoint
+            periodic_ckpt_path = None
+            # periodic_ckpt_path = self.save_checkpoint(name=f"epoch_{self.current_epoch}")
+            best_ckpt_path = None
 
             # gather losses from each worker and place them on the main worker.
             worker_val_losses = self._time_and_log(
                 lambda: self.strategy.gather(val_loss, dst_rank=0),
                 "gather_loss_time_s_per_epoch",
-                step=epoch,
+                step=self.current_epoch,
             )
             if not self.strategy.is_main_worker:
+                # exit if not main worker
                 continue
 
-            if worker_val_losses is None:
-                raise ValueError("Worker val losses are None")
-            # check if all worker_val_losses are tensors
-            if not all(isinstance(loss, torch.Tensor) for loss in worker_val_losses):
-                raise ValueError("Worker val losses are not all tensors")
+            avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
+            if avg_val_loss < best_loss:
+                best_loss = avg_val_loss
+                best_model = self.model.state_dict()
+                # ! TODO: In hython, make loss serializable
+                # best_ckpt_path = self.save_checkpoint(
+                #     name="best_model",
+                #     best_validation_metric=avg_val_loss,
+                #     force=True,
+                # )
+                self.best_validation_metric = avg_val_loss
 
-            avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach()
-            if self.lr_scheduler is not None:
-                self.lr_scheduler.step(avg_val_loss)  # type: ignore ->
-            loss_history["train"].append(train_loss)
-            loss_history["val"].append(avg_val_loss)
-
-            self.log(
-                item=train_loss.item(),
-                identifier="train_loss_per_epoch",
-                kind="metric",
-                step=epoch,
-            )
-            self.log(
-                item=avg_val_loss.item(),
-                identifier="val_loss_per_epoch",
-                kind="metric",
-                step=epoch,
-            )
+            # Report validation metrics to Ray (useful for tuning!)
+            metric_name = _get_tuning_metric_name(self.ray_tune_config)
+            if metric_name is None:
+                raise ValueError("Could not find a metric in the TuneConfig")
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
@@ -807,16 +769,24 @@ class RNNDistributedTrainer(TorchTrainer):
                     item=m_val,
                     identifier=m_name + "_epoch",
                     kind="metric",
-                    step=epoch,
+                    step=self.current_epoch,
                 )
 
-            if avg_val_loss < best_loss:
-                best_loss = avg_val_loss
-                best_model = self.model.state_dict()
-                # self.hython_trainer.save_weights(self.model)
+            self.log(
+                item=train_loss.item(),
+                identifier="train_loss_per_epoch",
+                kind="metric",
+                step=self.current_epoch,
+            )
+            self.log(
+                item=avg_val_loss.item(),
+                identifier="val_loss_per_epoch",
+                kind="metric",
+                step=self.current_epoch,
+            )
 
             epoch_time = default_timer() - epoch_start_time
-            epoch_time_tracker.add_epoch_time(epoch + 1, epoch_time)
+            epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)
             if self.time_ray:
                 # time and log the ray_report call
                 self._time_and_log(
@@ -824,14 +794,23 @@ class RNNDistributedTrainer(TorchTrainer):
                         metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
                     ),
                     "ray_report_time_s_per_epoch",
-                    step=epoch,
+                    step=self.current_epoch,
                 )
             else:
                 self.ray_report(
                     metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
                 )
 
+            if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
+                self.test_epoch()
+
+            if self.strategy.is_distributed:  # only main worker
+                assert epoch_time_tracker is not None
+                epoch_time = default_timer() - epoch_start_time
+                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)
+
         if self.strategy.is_main_worker:
+            # Save best model in ml flow
             epoch_time_tracker.save()
             self.model.load_state_dict(best_model)
 
@@ -852,8 +831,6 @@ class RNNDistributedTrainer(TorchTrainer):
                     )
                 else:
                     self.model_api.log_model(module_name, item)
-
-        return loss_history, metric_history
 
     def create_dataloaders(
         self,
@@ -884,7 +861,6 @@ class RNNDistributedTrainer(TorchTrainer):
             processing=processing,
             sampling_kwargs=sampling_kwargs,
         )
-
         val_sampler_builder = SamplerBuilder(
             validation_dataset,
             sampling="sequential",
@@ -896,7 +872,7 @@ class RNNDistributedTrainer(TorchTrainer):
         val_sampler = val_sampler_builder.get_sampler()
 
         batch_size = self.config.batch_size // self.strategy.global_world_size()
-        self.train_loader = self.strategy.create_dataloader(
+        self.train_dataloader = self.strategy.create_dataloader(
             dataset=train_dataset,
             batch_size=batch_size,
             num_workers=self.config.num_workers_dataloader,
@@ -906,15 +882,15 @@ class RNNDistributedTrainer(TorchTrainer):
             generator=self.torch_rng,
             sampler=train_sampler,
             drop_last=True,
-        )  # INFO: drop_last=True, throws errors for samples < batch size, as empty then
+        )  # ! drop_last=True, throws errors for samples < batch size, as empty then
         # (can happen for strong downsampling)
         # check if train_dataset has different time ranges for different batches
 
-        self.train_time_range = next(iter(self.train_loader))['xd'].shape[1]
+        self.train_time_range = train_dataset[0]['xd'].shape[0]
 
         # Get sequence length from configuration
         if validation_dataset is not None:
-            self.val_loader = self.strategy.create_dataloader(
+            self.validation_dataloader = self.strategy.create_dataloader(
                 dataset=validation_dataset,
                 batch_size=batch_size,
                 num_workers=self.config.num_workers_dataloader,
@@ -922,6 +898,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 generator=self.torch_rng,
                 sampler=val_sampler,
                 drop_last=True,
-            )  # INFO: drop_last=True, throws errors for samples < batch size
+            )  # ! drop_last=True, throws errors for samples < batch size
             # (can happen for strong downsampling)
-            self.val_time_range = next(iter(self.val_loader))['xd'].shape[1]
+            self.val_time_range = validation_dataset[0]['xd'].shape[0]

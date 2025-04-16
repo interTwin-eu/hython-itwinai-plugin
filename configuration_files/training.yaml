@@ -19,7 +19,7 @@ experiment_run: "hython-plugin3"
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 run_id: "unnamed-run"
 
-train_temporal_range: ["2016-01-01", "2019-12-31"]
+train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
 test_temporal_range: ["2019-01-01", "2020-12-31"]
 
@@ -48,9 +48,10 @@ hython_trainer: rnntrainer
 
 loss_fn:
   _target_: hython.losses.RMSELoss
-    
 metric_fn:
   _target_: hython.metrics.MSEMetric
+# TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
+metric_name: MSEMetric
 
 optimizer: adam
 
@@ -66,7 +67,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 4
+epochs: 3
 time_ray: True
 
 gradient_clip: null
@@ -83,12 +84,12 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 test_downsampler: null
 
@@ -224,6 +225,7 @@ training_pipeline:
 
         loss_fn: ${loss_fn}
         metric_fn: ${metric_fn}
+        metric_name: ${metric_name}
 
         gradient_clip: ${gradient_clip}
 
@@ -258,11 +260,11 @@ training_pipeline:
         num_workers: 1
         use_gpu: true
         resources_per_worker:
-          CPU: 3
+          CPU: 6
           GPU: 1
       ray_tune_config:
         _target_: ray.tune.TuneConfig
-        num_samples: 2
+        num_samples: 4
         scheduler: null
         #   _target_: ray.tune.schedulers.ASHAScheduler
         #   metric: loss
