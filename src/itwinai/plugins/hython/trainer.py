@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import torch
 from hydra.utils import instantiate
-from ray import train
 from torch import nn
 from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -105,11 +104,17 @@ class RNNDistributedTrainer(TorchTrainer):
         metrics = {}
         metrics["MSEMetric"] = MSEMetric()
         self.metrics = metrics
+
+        # set in concatenate_result
         self.epoch_preds = None
         self.epoch_targets = None
         self.epoch_valid_masks = None
+
+        # set in create_dataloaders
+        self.time_index = None
+
         # store local vars as attributes
-        self.save_parameters(**self.locals2params(locals()))
+        # self.save_parameters(**self.locals2params(locals()))
         # returns the model class def in config
         self.model_class = get_hython_model(model)
         self.model_class_name = model
@@ -575,7 +580,7 @@ class RNNDistributedTrainer(TorchTrainer):
             chunk_size = 5  # Tune this based on your GPU memory
             for t_chunk in torch.split(time_indices, chunk_size):
                 start_prep = time.time()
-                    # Process multiple timesteps at once
+                # Process multiple timesteps at once
                 dynamic_bt = data["xd"].index_select(1, t_chunk)
                 targets_bt = data["y"].index_select(1, t_chunk)
 
@@ -625,18 +630,18 @@ class RNNDistributedTrainer(TorchTrainer):
             data_points += data["xd"].size(0)
             running_batch_loss += batch_loss.detach()
 
-        epoch_loss = running_batch_loss / data_points
+        epoch_loss = running_batch_loss / len(dataloader)
         metric = self._compute_metric()
 
         if self.strategy.is_main_worker:
-            py_logger.info(f"Data loading took: {data_load_time:.2f}s")
-            py_logger.info(f"Computation took: {compute_time:.2f}s")
-            py_logger.info(f"Data preparation took: {data_prep_time:.2f}s")
-            py_logger.info(f"Inference took: {inference_time:.2f}s")
-            py_logger.info(f"Prediction took: {predict_time:.2f}s")
-            py_logger.info(f"Target took: {target_time:.2f}s")
-            py_logger.info(f"Loss took: {loss_time:.2f}s")
-            py_logger.info(f"Concat took: {concat_time:.2f}s")
+            py_logger.debug(f"Data loading took: {data_load_time:.2f}s")
+            py_logger.debug(f"Computation took: {compute_time:.2f}s")
+            py_logger.debug(f"Data preparation took: {data_prep_time:.2f}s")
+            py_logger.debug(f"Inference took: {inference_time:.2f}s")
+            py_logger.debug(f"Prediction took: {predict_time:.2f}s")
+            py_logger.debug(f"Target took: {target_time:.2f}s")
+            py_logger.debug(f"Loss took: {loss_time:.2f}s")
+            py_logger.debug(f"Concat took: {concat_time:.2f}s")
         return epoch_loss, metric
 
     def _set_dynamic_temporal_downsampling(
@@ -750,10 +755,11 @@ class RNNDistributedTrainer(TorchTrainer):
                 self.model, self.train_loader, self.val_loader)
 
             # gather losses from each worker and place them on the main worker.
-            before_gather = time.time()
-            worker_val_losses = self.strategy.gather(val_loss, dst_rank=0)
-            after_gather = time.time()
-            py_logger.info(f"Gather took: {after_gather - before_gather:.2f}s")
+            worker_val_losses = self._time_and_log(
+                lambda: self.strategy.gather(val_loss, dst_rank=0),
+                "gather_loss_time_s_per_epoch",
+                step=epoch,
+            )
             if not self.strategy.is_main_worker:
                 continue
 
@@ -811,15 +817,19 @@ class RNNDistributedTrainer(TorchTrainer):
 
             epoch_time = default_timer() - epoch_start_time
             epoch_time_tracker.add_epoch_time(epoch + 1, epoch_time)
-            before_t = time.time()
-            train.report({"loss": avg_val_loss.item(), "train_loss": train_loss.item()})
-            after_t = time.time()
-            self.log(
-                item=after_t-before_t,
-                identifier="report_time",
-                kind="metric",
-                step=epoch,
-            )
+            if self.time_ray:
+                # time and log the ray_report call
+                self._time_and_log(
+                    lambda: self.ray_report(
+                        metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
+                    ),
+                    "ray_report_time_s_per_epoch",
+                    step=epoch,
+                )
+            else:
+                self.ray_report(
+                    metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
+                )
 
         if self.strategy.is_main_worker:
             epoch_time_tracker.save()

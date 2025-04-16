@@ -31,7 +31,7 @@ model: CudaLSTM
 
 hidden_size: 256
 dropout: 0.2
-lstm_layers: 4
+lstm_layers: 2
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -66,7 +66,8 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 20
+epochs: 4
+time_ray: True
 
 gradient_clip: null
 
@@ -82,12 +83,12 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.005
+  frac_space: 0.05
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.005
+  frac_space: 0.05
 
 test_downsampler: null
 
@@ -95,14 +96,14 @@ test_downsampler: null
 # temporal downsampling
 downsampling_temporal_dynamic: True
 temporal_downsampling: True
-temporal_subset: [50, 50]
+temporal_subset: [100, 100]
 
 
 # === Data ===
 
 data_lazy_load: False
-
 dataset: WflowSBM
+num_workers_dataloader: 4
 
 data_source:
   file:
@@ -163,9 +164,6 @@ model_logger:
       load: False
 
 
-
-# == Pipeline == 
-
 training_pipeline:
   _target_: itwinai.pipeline.Pipeline
   steps:
@@ -197,7 +195,7 @@ training_pipeline:
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
-        num_workers_dataloader: 5
+        num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
         #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
@@ -233,6 +231,8 @@ training_pipeline:
 
         # model logger
         model_logger: ${model_logger}
+        
+      time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
@@ -258,11 +258,11 @@ training_pipeline:
         num_workers: 1
         use_gpu: true
         resources_per_worker:
-          CPU: 6
+          CPU: 3
           GPU: 1
       ray_tune_config:
         _target_: ray.tune.TuneConfig
-        num_samples: 4
+        num_samples: 2
         scheduler: null
         #   _target_: ray.tune.schedulers.ASHAScheduler
         #   metric: loss
