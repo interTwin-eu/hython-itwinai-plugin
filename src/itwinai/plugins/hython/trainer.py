@@ -719,9 +719,9 @@ class RNNDistributedTrainer(TorchTrainer):
             val_loss, val_metric = self.validation_epoch()
 
             # ! TODO: In hython, make loss serializable, before being able to save checkpoint
-            periodic_ckpt_path = None
+            # periodic_ckpt_path = None
             # periodic_ckpt_path = self.save_checkpoint(name=f"epoch_{self.current_epoch}")
-            best_ckpt_path = None
+            # best_ckpt_path = None
 
             # gather losses from each worker and place them on the main worker.
             worker_val_losses = self._time_and_log(
