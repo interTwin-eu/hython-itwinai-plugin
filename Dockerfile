@@ -12,6 +12,6 @@ COPY src/ src/
 COPY pyproject.toml pyproject.toml
 
 # Install dependencies
-RUN pip install uv
+RUN pip --no-cache-dir install uv==0.6.16
 RUN uv pip install --no-cache-dir .
 

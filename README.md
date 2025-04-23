@@ -23,6 +23,7 @@ DeepSpeed:
 ```bash
 sbatch installation-scripts/horovod-deepspeed-JSC.slurm
 ```
+
 The script will install Horovod and DeepSpeed with the correct installation flags. It
 usually takes around 20 minutes to complete. 
 
