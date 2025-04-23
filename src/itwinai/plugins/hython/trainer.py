@@ -389,6 +389,8 @@ class RNNDistributedTrainer(TorchTrainer):
             pred_cpu = prediction["y_hat"].detach().cpu().numpy()
         elif self.config.model_head_layer == "distr_normal":
             pred_cpu = prediction["mu"].detach().cpu().numpy()
+        else:
+            raise ValueError(f"Unknown model head layer: {self.config.model_head_layer}")
 
         target_cpu = target.detach().cpu().numpy()
         if mask is not None:
@@ -465,13 +467,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 n = torch.ones_like(iypred["mu"])
 
             w: float = target_weight[target_name]
-            # ! Should not be needed, as we do not set multiple gpus per worker!
-            # check if ray is running before
-            # if ray_cluster_is_running():
-            #     for key, value in iypred.items():
-            #         iypred[key] = value.to(f"cuda:{get_context().get_local_rank()}")
-            #     iytrue.to(f"cuda:{get_context().get_local_rank()}")
-
             loss_tmp: torch.Tensor = self.loss(iytrue, **iypred)
 
             # in case there are missing observations in the batch
@@ -485,22 +480,7 @@ class RNNDistributedTrainer(TorchTrainer):
 
             loss += loss_tmp * w
 
-        self._set_regularization()
-
         return loss
-
-    def _set_regularization(self) -> None:
-        """Set the regularization for the model.
-
-        Returns:
-            None
-        """
-        self.add_regularization = {}
-
-        # return a dictionary of { reg_func1: weight1, reg_func2: weight2, ...   }
-
-        # actually regularization should access any data in the trainig loop not only pred,
-        # target
 
     def _backprop_loss(self, loss: torch.Tensor, opt: Optimizer) -> None:
         """Backpropagate the loss.
@@ -760,7 +740,7 @@ class RNNDistributedTrainer(TorchTrainer):
                         new_metric_key = period + "_" + metric_key
                         metric_history_[new_metric_key] = [metric_value]
 
-            avg_metrics = pd.DataFrame(metric_history_).mean().to_dict()
+            avg_metrics = pd.DataFrame(metric_history_).mean().to_dict() # type: ignore
             for m_name, m_val in avg_metrics.items():
                 self.log(
                     item=m_val,
@@ -783,7 +763,7 @@ class RNNDistributedTrainer(TorchTrainer):
             )
 
             epoch_time = default_timer() - epoch_start_time
-            epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)
+            epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time) # type: ignore
             if self.time_ray:
                 # time and log the ray_report call
                 self._time_and_log(
@@ -802,13 +782,13 @@ class RNNDistributedTrainer(TorchTrainer):
                 self.test_epoch()
 
             if self.strategy.is_distributed:  # only main worker
-                assert epoch_time_tracker is not None
+                assert epoch_time_tracker is not None # type: ignore
                 epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)
+                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time) # type: ignore
 
         if self.strategy.is_main_worker:
             # Save best model in ml flow
-            epoch_time_tracker.save()
+            epoch_time_tracker.save() # type: ignore
             self.model.load_state_dict(best_model)
 
             # MODEL LOGGING
