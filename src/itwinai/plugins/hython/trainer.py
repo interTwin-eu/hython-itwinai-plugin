@@ -682,6 +682,7 @@ class RNNDistributedTrainer(TorchTrainer):
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
 
         best_loss = float("inf")
+        best_model = None
         progress_bar = tqdm(
             range(self.current_epoch, self.epochs),
             desc="Epochs",
@@ -789,7 +790,8 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.strategy.is_main_worker:
             # Save best model in ml flow
             epoch_time_tracker.save() # type: ignore
-            self.model.load_state_dict(best_model)
+            if best_model is not None:
+                self.model.load_state_dict(best_model)
 
             # MODEL LOGGING
             model_log_names = self.model_api.get_model_log_names()

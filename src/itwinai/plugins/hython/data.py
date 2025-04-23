@@ -33,8 +33,8 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         mask_variables: List[str] | None = None,
         static_inputs_mask: List[str] | None = None,
         head_model_inputs: List[str] | None = None,
-        train_temporal_range: List[str] = None,
-        valid_temporal_range: List[str] = None,
+        train_temporal_range: List[str] | None = None,
+        valid_temporal_range: List[str] | None = None,
         train_downsampler: Dict | None = None,
         valid_downsampler: Dict | None = None,
         downsampling_temporal_dynamic: bool | None = None,
@@ -50,13 +50,16 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         for i in self.parameters:
             setattr(cfg, i, self.parameters[i])
 
-        scaler = Scaler(cfg, cfg.scaling_use_cached)
+        scaler = Scaler(cfg, cfg.scaling_use_cached) # type: ignore
 
-        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")
+        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train") # type: ignore
         # check pickled dataset size
-        py_logger.info(f"pickled train_dataset_size: {len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB")
+        py_logger.info(
+            "pickled train_dataset_size: "
+            f"{len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB"
+            )
 
-        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")
+        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid") # type: ignore
         return train_dataset, val_dataset, None
 
 
