@@ -1,4 +1,5 @@
 FROM ghcr.io/intertwin-eu/itwinai:torch-slim-latest
+LABEL org.opencontainers.image.source="https://github.com/interTwin-eu/hython-itwinai-plugin"
 
 # Set working directory
 WORKDIR /app
