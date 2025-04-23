@@ -8,6 +8,7 @@
 # - Henry Mutegeki <henry.mutegeki@cern.ch> - CERN
 # - Iacopo Ferrario <iacopofederico.ferrario@eurac.edu> - EURAC
 # - Matteo Bunino <matteo.bunino@cern.ch> - CERN
+# - Linus Maximilian Eickhoff <linus.maximilian.eickhoff@cern.ch> - CERN
 # --------------------------------------------------------------------------------------
 
 # General configuration
@@ -18,7 +19,7 @@ experiment_run: "hython-plugin3"
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 run_id: "unnamed-run"
 
-train_temporal_range: ["2016-01-01", "2019-12-31"]
+train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
 test_temporal_range: ["2019-01-01", "2020-12-31"]
 
@@ -28,9 +29,9 @@ seed: 10
 
 model: CudaLSTM
 
-hidden_size: 64
+hidden_size: 256
 dropout: 0.2
-lstm_layers: 1
+lstm_layers: 2
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -47,9 +48,10 @@ hython_trainer: rnntrainer
 
 loss_fn:
   _target_: hython.losses.RMSELoss
-    
 metric_fn:
   _target_: hython.metrics.MSEMetric
+# TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
+metric_name: MSEMetric
 
 optimizer: adam
 
@@ -63,9 +65,10 @@ seq_length: 180
 
 learning_rate: 0.001
 
-batch: 128
+batch: 512
 
-epochs: 4
+epochs: 3
+time_ray: True
 
 gradient_clip: null
 
@@ -81,12 +84,12 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.01
+  frac_space: 0.1
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.01
+  frac_space: 0.1
 
 test_downsampler: null
 
@@ -94,14 +97,14 @@ test_downsampler: null
 # temporal downsampling
 downsampling_temporal_dynamic: True
 temporal_downsampling: True
-temporal_subset: [50, 50]
+temporal_subset: [100, 100]
 
 
 # === Data ===
 
 data_lazy_load: False
-
 dataset: WflowSBM
+num_workers_dataloader: 4
 
 data_source:
   file:
@@ -162,9 +165,6 @@ model_logger:
       load: False
 
 
-
-# == Pipeline == 
-
 training_pipeline:
   _target_: itwinai.pipeline.Pipeline
   steps:
@@ -196,7 +196,8 @@ training_pipeline:
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
-        num_workers_dataloader: 1
+        num_workers_dataloader: ${num_workers_dataloader}
+        pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
         #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
         temporal_downsampling: ${temporal_downsampling}
@@ -224,6 +225,7 @@ training_pipeline:
 
         loss_fn: ${loss_fn}
         metric_fn: ${metric_fn}
+        metric_name: ${metric_name}
 
         gradient_clip: ${gradient_clip}
 
@@ -231,11 +233,12 @@ training_pipeline:
 
         # model logger
         model_logger: ${model_logger}
-
+        
+      time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: False
+      measure_communication_overhead: True
       measure_epoch_time: True
       run_id: $(run_id)
       random_seed: ${seed}
@@ -246,11 +249,11 @@ training_pipeline:
         loggers:
           - _target_: itwinai.loggers.ConsoleLogger
             log_freq: 1
-          # - _target_: itwinai.loggers.MLFlowLogger
-          #   experiment_name: ${experiment_name}
-          #   run_name: ${experiment_run}
-          #   log_freq: batch
-          #   savedir: /home/iferrario/dev/hython/hython/itwinai/mllogs
+          - _target_: itwinai.loggers.MLFlowLogger
+            experiment_name: ${experiment_name}
+            run_name: ${experiment_run}
+            log_freq: batch
+            # tracking_uri: https://mlflow.intertwin.fedcloud.eu/
                     
       ray_scaling_config:
         _target_: ray.train.ScalingConfig
@@ -261,26 +264,44 @@ training_pipeline:
           GPU: 1
       ray_tune_config:
         _target_: ray.tune.TuneConfig
-        num_samples: 2
-        scheduler:
-          _target_: ray.tune.schedulers.ASHAScheduler
-          metric: loss
-          mode: min
-          max_t: 5
-          grace_period: 2
-          reduction_factor: 6
-          brackets: 1
+        num_samples: 4
+        scheduler: null
+        #   _target_: ray.tune.schedulers.ASHAScheduler
+        #   metric: loss
+        #   mode: min
+        #   max_t: 5
+        #   grace_period: 2
+        #   reduction_factor: 6
+        #   brackets: 1
       ray_run_config:
         _target_: ray.train.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
         # job is launched using the itwinai custom OmegaConf resolver ${itwinai.cwd:}
         storage_path: ${itwinai.cwd:}/ray_checkpoints
-        name: MNIST-HPO-Experiment
+        name: EURAC-HPO-Experiment
       ray_search_space:
         batch_size:
-          type: choice
-          categories: [256, 512]
+          type: qrandint
+          lower: 128
+          upper: 1024
+          q: 128
         optim_lr:
           type: uniform
-          lower: 1e-5
-          upper: 1e-3
+          lower: 1e-4
+          upper: 1e-2
+        hidden_size:
+          type: randint
+          lower: 16
+          upper: 512
+        dropout:
+          type: choice
+          categories: [0.1, 0.2, 0.3, 0.4, 0.5]
+        seq_length:
+          type: qrandint
+          lower: 90
+          upper: 365
+          q: 30
+        interval_value:
+          type: choice
+          categories: [3, 5, 10]
+        
