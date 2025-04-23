@@ -1,6 +1,5 @@
 import logging
 import os
-import time
 from pathlib import Path
 from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
@@ -203,6 +202,10 @@ class RNNDistributedTrainer(TorchTrainer):
         self.lr_scheduler = get_lr_scheduler(self.optimizer, self.config)
 
     def _set_optimizer_from_config(self) -> None:
+        """Set the optimizer from the configuration.
+        Creates an optimizer instance using the configuration parameters and assigns it to
+        self.optimizer.
+        """
         self.optimizer = get_optimizer(self.model, self.config)
 
     def _set_target_weights(self) -> None:
@@ -267,6 +270,11 @@ class RNNDistributedTrainer(TorchTrainer):
         py_logger.info("Model, optimizer, and scheduler distributed")
 
     def _set_loss_from_config(self) -> None:
+        """Set the loss function from the configuration.
+
+        Instantiates the loss function specified in the configuration and assigns it to
+        self.loss.
+        """
         self.loss = instantiate({"loss_fn": self.config.loss_fn})["loss_fn"]
 
     def set_epoch(self) -> None:
@@ -304,6 +312,12 @@ class RNNDistributedTrainer(TorchTrainer):
         return train_loss, train_metric
 
     def validation_epoch(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Run one validation epoch.
+
+        Returns:
+            Tuple[torch.Tensor, Dict[str, torch.Tensor]]: Tuple containing
+                (validation_loss, validation_metrics)
+        """
         self.model.eval()
         with torch.no_grad():
             # set time indices for validation
@@ -321,8 +335,16 @@ class RNNDistributedTrainer(TorchTrainer):
         return val_loss, val_metric
 
     def target_step(self, target: torch.Tensor, steps: int = 1) -> torch.Tensor:
-        selection = get_temporal_steps(steps)
+        """Process target tensor for a specified number of steps.
 
+        Args:
+            target (torch.Tensor): The target tensor to process
+            steps (int, optional): Number of temporal steps to select. Defaults to 1.
+
+        Returns:
+            torch.Tensor: Processed target tensor with selected temporal steps
+        """
+        selection = get_temporal_steps(steps)
         return target[:, selection]
 
     def predict_step(
@@ -330,7 +352,15 @@ class RNNDistributedTrainer(TorchTrainer):
         prediction: Dict[str, torch.Tensor],
         steps: int = -1,
     ) -> Dict[str, torch.Tensor]:
-        """Return the n steps that should be predicted"""
+        """Process model predictions for a specified number of steps.
+
+        Args:
+            prediction (Dict[str, torch.Tensor]): Dictionary containing model predictions
+            steps (int, optional): Number of temporal steps to select. Defaults to -1.
+
+        Returns:
+            Dict[str, torch.Tensor]: Processed predictions with selected temporal steps
+        """
         selection = get_temporal_steps(steps)
         output = {}
         if self.config.model_head_layer == "regression":
@@ -526,61 +556,41 @@ class RNNDistributedTrainer(TorchTrainer):
         dataloader: DataLoader,
         opt: Optimizer | None = None,
     ) -> Tuple[Any, Dict[str, Any]]:
-        """Run one epoch of the model."""
+        """Run one epoch of training or validation.
+
+        Args:
+            model (nn.Module): The model to train/evaluate
+            dataloader (DataLoader): DataLoader providing the batches
+            opt (Optimizer | None, optional): Optimizer for training. Defaults to None.
+
+        Returns:
+            Tuple[Any, Dict[str, Any]]: Tuple containing (epoch_loss, metrics)
+        """
         # Pre-compute time indices once at the start of epoch
         time_indices = torch.tensor(self.time_index, device=self.strategy.device())
 
         running_batch_loss = 0
         data_points = 0
 
-        # TODO: remove Time tracking
-        data_load_time = 0
-        compute_time = 0
-        data_prep_time = 0
-        inference_time = 0
-        predict_time = 0
-        target_time = 0
-        loss_time = 0
-        concat_time = 0
-
         for batch in dataloader:
-            start_load = time.time()
             batch = prepare_batch_for_device(batch, self.strategy.device())
-            data_load_time += time.time() - start_load
-            start_compute = time.time()
-            # Process all time steps in parallel if possible
             all_losses = []
 
-            # Process in chunks to avoid memory issues
-            start_prep = time.time()
-            # Process multiple timesteps at once
+            # process dynamic data
             dynamic_bt = batch["xd"].index_select(1, time_indices)
+            # process targets
             targets_bt = batch["y"].index_select(1, time_indices)
-
-            # Optimize static data handling
+            # process static data
             static_bt = batch["xs"].unsqueeze(1).expand(-1, len(time_indices), -1)
-
-            # Single concatenation for the chunk
+            # concatenate dynamic and static data
             x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
-            data_prep_time += time.time() - start_prep
 
-            start_inference = time.time()
+            # process predictions
             pred = model(x_concat)
-            inference_time += time.time() - start_inference
-
-            start_predict = time.time()
             output = self.predict_step(pred, steps=self.config.predict_steps)
-            predict_time += time.time() - start_predict
-
-            start_target = time.time()
             target = self.target_step(targets_bt, steps=self.config.predict_steps)
-            target_time += time.time() - start_target
-
-            start_concat = time.time()
             self._concatenate_result(output, target)
-            concat_time += time.time() - start_concat
 
-            start_loss = time.time()
             # ! this is not batch loss, but sequence loss
             batch_sequence_loss = self._compute_batch_loss(
                 prediction=output,
@@ -588,17 +598,13 @@ class RNNDistributedTrainer(TorchTrainer):
                 valid_mask=None,
                 target_weight=self.target_weights,
             )
-            loss_time += time.time() - start_loss
             all_losses.append(batch_sequence_loss)
 
-            # Calculate mean loss regardless of whether we're training or validating
             batch_loss = torch.mean(torch.stack(all_losses))
 
             # Only do backprop during training
             if opt is not None:
                 self._backprop_loss(batch_loss, opt)
-
-            compute_time += time.time() - start_compute
 
             data_points += batch["xd"].size(0)
             running_batch_loss += batch_loss.detach()
@@ -606,15 +612,6 @@ class RNNDistributedTrainer(TorchTrainer):
         epoch_loss = running_batch_loss / len(dataloader)
         metric = self.compute_metrics()
 
-        if self.strategy.is_main_worker:
-            py_logger.debug(f"Data loading took: {data_load_time:.2f}s")
-            py_logger.debug(f"Computation took: {compute_time:.2f}s")
-            py_logger.debug(f"Data preparation took: {data_prep_time:.2f}s")
-            py_logger.debug(f"Inference took: {inference_time:.2f}s")
-            py_logger.debug(f"Prediction took: {predict_time:.2f}s")
-            py_logger.debug(f"Target took: {target_time:.2f}s")
-            py_logger.debug(f"Loss took: {loss_time:.2f}s")
-            py_logger.debug(f"Concat took: {concat_time:.2f}s")
         return epoch_loss, metric
 
     def _set_dynamic_temporal_downsampling(
