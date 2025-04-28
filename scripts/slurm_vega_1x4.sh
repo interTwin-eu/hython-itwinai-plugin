@@ -6,8 +6,8 @@
 #SBATCH --partition=gpu
 #SBATCH --time=00:30:00
 
-#SBATCH --output=slurm_job_logs/ddp-1x4.out
-#SBATCH --error=slurm_job_logs/ddp-1x4.err
+#SBATCH --output=slurm_job_logs/vega-ddp-1x4.out
+#SBATCH --error=slurm_job_logs/vega-ddp-1x4.err
 
 # Resource allocation
 #SBATCH --nodes=1
@@ -27,18 +27,24 @@ ml GCCcore/13.3.0 \
     mpi4py \
     OpenSSL/3
 source .venv/bin/activate
+timestamp=$(date +%s)
 export OMP_NUM_THREADS=4
+export HYDRA_FULL_ERROR=1
 
 # Job execution command
 srun --cpu-bind=none --ntasks-per-node=1 \
-bash -c "torchrun \
---log_dir='logs_torchrun' \
---nnodes=$SLURM_NNODES \
---nproc_per_node=$SLURM_GPUS_PER_NODE \
---rdzv_id=$SLURM_JOB_ID \
---rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
---rdzv_backend=c10d \
---rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
-$(which itwinai) exec-pipeline \
-strategy=ddp \
-checkpoints_location=checkpoints_ddp"
+bash -c "ray start \
+--head \
+--node-ip-address=localhost \
+--port=7639 \
+--num-cpus=32 \
+--num-gpus=4 \
+--dashboard-host=0.0.0.0 \
+--dashboard-port=8265 \
+&& \
+itwinai exec-pipeline \
+--config-path configuration_files \
+--config-name training \
+num_workers_dataloader=4 \
+experiment_name=ddp-1x4-${USER}\
+experiment_run=ddp-1x4-${timestamp}"
