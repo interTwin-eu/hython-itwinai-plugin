@@ -96,7 +96,7 @@ test_downsampler: null
 # temporal downsampling
 downsampling_temporal_dynamic: True
 temporal_downsampling: True
-temporal_subset: [100, 100]
+temporal_subset: [10, 10]
 
 
 # === Data ===
