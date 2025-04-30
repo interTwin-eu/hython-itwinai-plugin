@@ -11,13 +11,12 @@
 # - Linus Maximilian Eickhoff <linus.maximilian.eickhoff@cern.ch> - CERN
 # --------------------------------------------------------------------------------------
 
+#! change run or exp name for each user on JSC (overwrite will fail due to permissions)
 # General configuration
-experiment_name: "training"
-#! change run name for each user on JSC (overwrite will fail due to permissions)
-experiment_run: "hython-plugin3"
+experiment_name: "vega-train-eurac"
+experiment_run: "vega-train-eurac-1"
 
-work_dir: /p/scratch/intertwin/datasets/eurac/model
-run_id: "unnamed-run"
+work_dir: /ceph/hpc/data/st2301-itwin-users/eurac
 
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
@@ -67,7 +66,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 3
+epochs: 2
 time_ray: True
 
 gradient_clip: null
@@ -97,21 +96,27 @@ test_downsampler: null
 # temporal downsampling
 downsampling_temporal_dynamic: True
 temporal_downsampling: True
-temporal_subset: [100, 100]
+temporal_subset: [10, 10]
 
 
 # === Data ===
-
 data_lazy_load: False
 dataset: WflowSBM
 num_workers_dataloader: 4
 
+# === Ray HPO ===
+num_workers_per_trial: 1
+cpu_per_worker: 6
+gpu_per_worker: 1 # 0. - 1
+trials: 4
+
+
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
-  # s3:
+    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_static.zarr
+    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_dynamic.zarr
+    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/eobs_dynamic.zarr
+# s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
 static_categorical_inputs:
@@ -141,31 +146,106 @@ mask_variables:
 scaling_variant: minmax
 scaling_use_cached: True
 
-# ==== MODEL LOGGER ========
-#mlflow: 
-# - ``/Users/me/path/to/local/model``
-# - ``relative/path/to/local/model``
-# - ``s3://my_bucket/path/to/model``
-# - ``runs:/<mlflow_run_id>/run-relative/path/to/model``
-# - ``models:/<model_name>/<model_version>``
-# - ``models:/<model_name>/<stage>``
-#local:
-# "/home/iferrario/dev/notebooks/config/lstm_v2.yaml"
-# /mnt/CEPH_PROJECTS/InterTwin/hython_model_run/lstm_vwc/model.pt
+# MLFLow
+tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
 
-# where the model is loaded/saved
 model_logger:
   CudaLSTM:
       logger: local
       model_component: model # the main model
       model_name: ${model}
       model_uri: ${work_dir}/${experiment_name}_${experiment_run}/${model}.pt
-      #model_uri: "models:/${model}/latest" #  
       log: True
       load: False
 
+training:
+  _target_: itwinai.pipeline.Pipeline
+  steps:
+    - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
+      hython_trainer: ${hython_trainer}
+      dynamic_inputs: ${dynamic_inputs}
+      static_inputs: ${static_inputs}
+      target_variables: ${target_variables}
+      mask_variables: ${mask_variables}
+      train_temporal_range: ${train_temporal_range}
+      valid_temporal_range: ${valid_temporal_range}
+      dataset: ${dataset}
+      data_lazy_load: ${data_lazy_load}
+      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
+      data_source: ${data_source}
+      scaling_variant: ${scaling_variant}
+      scaling_use_cached: ${scaling_use_cached}
+      experiment_name: ${experiment_name}
+      experiment_run: ${experiment_run}
+      work_dir: ${work_dir}
+      train_downsampler: ${train_downsampler}
+      valid_downsampler: ${valid_downsampler}
+    - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+      model: ${model}
+      config:
+        experiment: ${experiment_name}/${experiment_run}
+        experiment_name: ${experiment_name}
+        experiment_run: ${experiment_run}
+        work_dir: ${work_dir}
+        batch_size: ${batch}
+        learning_rate: ${learning_rate}
+        num_workers_dataloader: ${num_workers_dataloader}
+        pin_gpu_memory: True
+        hython_trainer: ${hython_trainer}
+        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
+        temporal_downsampling: ${temporal_downsampling}
+        temporal_subset: ${temporal_subset}
+        seq_length: ${seq_length}
+        target_variables: ${target_variables}
+        dynamic_inputs: ${dynamic_inputs}
+        static_inputs: ${static_inputs}
 
-training_pipeline:
+        optimizer: ${optimizer}
+        lr_scheduler: ${lr_scheduler}
+        target_weights: ${target_weights}
+
+        # model config
+        hidden_size: ${hidden_size}
+        dropout: ${dropout}
+        lstm_layers: ${lstm_layers}
+        lstm_batch_norm: ${lstm_batch_norm}
+
+        model_head_layer: ${model_head_layer}
+        model_head_activation: ${model_head_activation}
+        model_head_kwargs: ${model_head_kwargs}
+
+        loss_fn: ${loss_fn}
+        metric_fn: ${metric_fn}
+        metric_name: ${metric_name}
+
+        gradient_clip: ${gradient_clip}
+
+        predict_steps: ${predict_steps}
+
+        # model logger
+        model_logger: ${model_logger}
+        
+      strategy: ${strategy}
+      epochs: ${epochs}
+      measure_gpu_data: True
+      measure_communication_overhead: True
+      measure_epoch_time: True
+      run_id: $(experiment_run)
+      random_seed: ${seed}
+      profiling_wait_epochs: 1
+      profiling_warmup_epochs: 1
+      logger:
+        _target_: itwinai.loggers.LoggersCollection
+        loggers:
+          - _target_: itwinai.loggers.ConsoleLogger
+            log_freq: 1
+          - _target_: itwinai.loggers.MLFlowLogger
+            experiment_name: ${experiment_name}
+            run_name: ${experiment_run}
+            log_freq: batch
+            tracking_uri: ${tracking_uri}
+
+hpo:
   _target_: itwinai.pipeline.Pipeline
   steps:
     - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
@@ -240,7 +320,7 @@ training_pipeline:
       measure_gpu_data: True
       measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: $(run_id)
+      run_id: $(experiment_run)
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -253,18 +333,18 @@ training_pipeline:
             experiment_name: ${experiment_name}
             run_name: ${experiment_run}
             log_freq: batch
-            # tracking_uri: https://mlflow.intertwin.fedcloud.eu/
+            tracking_uri: ${tracking_uri}
                     
       ray_scaling_config:
         _target_: ray.train.ScalingConfig
-        num_workers: 1
+        num_workers: ${num_workers_per_trial}
         use_gpu: true
         resources_per_worker:
-          CPU: 6
-          GPU: 1
+          CPU: ${cpu_per_worker}
+          GPU: ${gpu_per_worker}
       ray_tune_config:
         _target_: ray.tune.TuneConfig
-        num_samples: 4
+        num_samples: ${trials}
         scheduler: null
         #   _target_: ray.tune.schedulers.ASHAScheduler
         #   metric: loss

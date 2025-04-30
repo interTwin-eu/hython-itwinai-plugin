@@ -489,16 +489,15 @@ class RNNDistributedTrainer(TorchTrainer):
             loss (torch.Tensor): loss
             opt (Optimizer): optimizer
         """
-        if opt is not None:
-            opt.zero_grad()
-            loss.backward()
+        opt.zero_grad()
+        loss.backward()
 
-            if self.config.gradient_clip is not None:
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), **self.config.gradient_clip  # type: ignore
-                )
+        if self.config.gradient_clip is not None:
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), **self.config.gradient_clip  # type: ignore
+            )
 
-            opt.step()
+        opt.step()
 
     def compute_metrics(self) -> Dict[str, Any]:
         """Compute the metric by the object's metric function.
@@ -548,50 +547,40 @@ class RNNDistributedTrainer(TorchTrainer):
         """
         # Pre-compute time indices once at the start of epoch
         time_indices = torch.tensor(self.time_index, device=self.strategy.device())
-
-        running_batch_loss = 0
-        data_points = 0
-
+        total_loss = 0.0
+        
         for batch in dataloader:
             batch = prepare_batch_for_device(batch, self.strategy.device())
-            all_losses = []
+            batch_loss = 0.0
+            for t in time_indices:
+                dynamic_bt = batch["xd"][:, t: t + self.config.seq_length]
+                targets_bt = batch["y"][:, t: t + self.config.seq_length]
+                static_bt = batch["xs"].unsqueeze(1).expand(-1, self.config.seq_length, -1)
+                x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
 
-            # process dynamic data
-            dynamic_bt = batch["xd"].index_select(1, time_indices)
-            # process targets
-            targets_bt = batch["y"].index_select(1, time_indices)
-            # process static data
-            static_bt = batch["xs"].unsqueeze(1).expand(-1, len(time_indices), -1)
-            # concatenate dynamic and static data
-            x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
+                pred = model(x_concat)
+                output = self.predict_step(pred, steps=self.config.predict_steps)
+                target = self.target_step(targets_bt, steps=self.config.predict_steps)
+                self._concatenate_result(output, target)
 
-            # process predictions
-            pred = model(x_concat)
-            output = self.predict_step(pred, steps=self.config.predict_steps)
-            target = self.target_step(targets_bt, steps=self.config.predict_steps)
-            self._concatenate_result(output, target)
+                batch_sequence_loss = self._compute_batch_loss(
+                    prediction=output,
+                    target=target,
+                    valid_mask=None,
+                    target_weight=self.target_weights,
+                )
 
-            # ! this is not batch loss, but sequence loss
-            batch_sequence_loss = self._compute_batch_loss(
-                prediction=output,
-                target=target,
-                valid_mask=None,
-                target_weight=self.target_weights,
-            )
-            all_losses.append(batch_sequence_loss)
+                if opt is not None:
+                    self._backprop_loss(batch_sequence_loss, opt)
 
-            batch_loss = torch.mean(torch.stack(all_losses))
+                batch_loss += batch_sequence_loss
 
-            # Only do backprop during training
-            if opt is not None:
-                self._backprop_loss(batch_loss, opt)
+            batch_loss = batch_loss / len(time_indices)
+            total_loss += batch_loss
 
-            data_points += batch["xd"].size(0)
-            running_batch_loss += batch_loss.detach()
-
-        epoch_loss = running_batch_loss / len(dataloader)
+        epoch_loss = total_loss / len(dataloader)
         metric = self.compute_metrics()
-
+        
         return epoch_loss, metric
 
     def _set_dynamic_temporal_downsampling(
