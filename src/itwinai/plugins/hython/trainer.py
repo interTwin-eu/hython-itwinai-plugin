@@ -489,16 +489,15 @@ class RNNDistributedTrainer(TorchTrainer):
             loss (torch.Tensor): loss
             opt (Optimizer): optimizer
         """
-        if opt is not None:
-            opt.zero_grad()
-            loss.backward()
+        opt.zero_grad()
+        loss.backward()
 
-            if self.config.gradient_clip is not None:
-                torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), **self.config.gradient_clip  # type: ignore
-                )
+        if self.config.gradient_clip is not None:
+            torch.nn.utils.clip_grad_norm_(
+                self.model.parameters(), **self.config.gradient_clip  # type: ignore
+            )
 
-            opt.step()
+        opt.step()
 
     def compute_metrics(self) -> Dict[str, Any]:
         """Compute the metric by the object's metric function.
@@ -550,13 +549,10 @@ class RNNDistributedTrainer(TorchTrainer):
         #time_indices = torch.tensor(self.time_index, device=self.strategy.device())
 
         running_batch_loss = 0
-        data_points = 0
+        #data_points = 0
 
         for batch in dataloader:
             batch = prepare_batch_for_device(batch, self.strategy.device())
-            all_losses = []
-
-            # process dynamic data
             dynamic_bt = batch["xd"]#.index_select(1, time_indices)
             # process targets
             targets_bt = batch["y"]#.index_select(1, time_indices)
@@ -571,27 +567,22 @@ class RNNDistributedTrainer(TorchTrainer):
             target = self.target_step(targets_bt, steps=self.config.predict_steps)
             self._concatenate_result(output, target)
 
-            # ! this is not batch loss, but sequence loss
-            batch_sequence_loss = self._compute_batch_loss(
+            batch_loss = self._compute_batch_loss(
                 prediction=output,
                 target=target,
                 valid_mask=None,
                 target_weight=self.target_weights,
             )
-            all_losses.append(batch_sequence_loss)
-
-            batch_loss = torch.mean(torch.stack(all_losses))
 
             # Only do backprop during training
             if opt is not None:
                 self._backprop_loss(batch_loss, opt)
 
-            data_points += batch["xd"].size(0)
             running_batch_loss += batch_loss.detach()
 
         epoch_loss = running_batch_loss / len(dataloader)
         metric = self.compute_metrics()
-
+        
         return epoch_loss, metric
 
     # def _set_dynamic_temporal_downsampling(
