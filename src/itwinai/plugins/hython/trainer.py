@@ -299,11 +299,11 @@ class RNNDistributedTrainer(TorchTrainer):
         """
         self.model.train()
         # set time indices for training
-        self._time_and_log(
-            lambda: self._set_dynamic_temporal_downsampling(opt=self.optimizer),
-            "set_dynamic_temporal_downsampling_train_s",
-            step=self.current_epoch,
-        )
+        # self._time_and_log(
+        #     lambda: self._set_dynamic_temporal_downsampling(opt=self.optimizer),
+        #     "set_dynamic_temporal_downsampling_train_s",
+        #     step=self.current_epoch,
+        # )
         if self.train_dataloader is None:
             raise ValueError("Train dataloader is None")
         train_loss, train_metric = self.epoch_step(
@@ -321,11 +321,11 @@ class RNNDistributedTrainer(TorchTrainer):
         self.model.eval()
         with torch.no_grad():
             # set time indices for validation
-            self._time_and_log(
-                lambda: self._set_dynamic_temporal_downsampling(opt=None),
-                "set_dynamic_temporal_downsampling_val_s",
-                step=self.current_epoch,
-            )
+            # self._time_and_log(
+            #     lambda: self._set_dynamic_temporal_downsampling(opt=None),
+            #     "set_dynamic_temporal_downsampling_val_s",
+            #     step=self.current_epoch,
+            # )
             if self.validation_dataloader is None:
                 raise ValueError("Validation dataloader is None")
             val_loss, val_metric = self.epoch_step(
@@ -547,7 +547,7 @@ class RNNDistributedTrainer(TorchTrainer):
             Tuple[Any, Dict[str, Any]]: Tuple containing (epoch_loss, metrics)
         """
         # Pre-compute time indices once at the start of epoch
-        time_indices = torch.tensor(self.time_index, device=self.strategy.device())
+        #time_indices = torch.tensor(self.time_index, device=self.strategy.device())
 
         running_batch_loss = 0
         data_points = 0
@@ -557,11 +557,11 @@ class RNNDistributedTrainer(TorchTrainer):
             all_losses = []
 
             # process dynamic data
-            dynamic_bt = batch["xd"].index_select(1, time_indices)
+            dynamic_bt = batch["xd"]#.index_select(1, time_indices)
             # process targets
-            targets_bt = batch["y"].index_select(1, time_indices)
+            targets_bt = batch["y"]#.index_select(1, time_indices)
             # process static data
-            static_bt = batch["xs"].unsqueeze(1).expand(-1, len(time_indices), -1)
+            static_bt = batch["xs"].unsqueeze(1).expand(-1, dynamic_bt.size(1), -1)
             # concatenate dynamic and static data
             x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
 
@@ -594,59 +594,59 @@ class RNNDistributedTrainer(TorchTrainer):
 
         return epoch_loss, metric
 
-    def _set_dynamic_temporal_downsampling(
-        self,
-        opt: Optimizer | None = None,
-    ) -> None:
-        """set the temporal indices of the timeseries"""
+    # def _set_dynamic_temporal_downsampling(
+    #     self,
+    #     opt: Optimizer | None = None,
+    # ) -> None:
+    #     """set the temporal indices of the timeseries"""
 
-        try:
-            temporal_downsampling = self.config.temporal_downsampling
-        except Exception:
-            py_logger.info("Temporal downsampling is not set")
-            temporal_downsampling = False
+    #     try:
+    #         temporal_downsampling = self.config.temporal_downsampling
+    #     except Exception:
+    #         py_logger.info("Temporal downsampling is not set")
+    #         temporal_downsampling = False
 
-        py_logger.debug("\n=== Setting temporal downsampling ===")
-        py_logger.debug(f"temporal_downsampling: {temporal_downsampling}")
-        py_logger.debug(f"opt is None: {opt is None}")
+    #     py_logger.debug("\n=== Setting temporal downsampling ===")
+    #     py_logger.debug(f"temporal_downsampling: {temporal_downsampling}")
+    #     py_logger.debug(f"opt is None: {opt is None}")
 
-        if temporal_downsampling:
-            if len(self.config.temporal_subset) > 1:
-                # use different time indices for training and validation
-                idx = -1 if opt is None else 0
-                time_range = self.val_time_range if opt is None else self.train_time_range
-                temporal_subset = self.config.temporal_subset[idx]
+    #     if temporal_downsampling:
+    #         if len(self.config.temporal_subset) > 1:
+    #             # use different time indices for training and validation
+    #             idx = -1 if opt is None else 0
+    #             time_range = self.val_time_range if opt is None else self.train_time_range
+    #             temporal_subset = self.config.temporal_subset[idx]
 
-                py_logger.debug("Multiple temporal subsets case:")
-                py_logger.debug(f"idx: {idx}")
-                py_logger.debug(f"time_range: {time_range}")
-                py_logger.debug(f"temporal_subset: {temporal_subset}")
-                py_logger.debug(f"seq_length: {self.config.seq_length}")
+    #             py_logger.debug("Multiple temporal subsets case:")
+    #             py_logger.debug(f"idx: {idx}")
+    #             py_logger.debug(f"time_range: {time_range}")
+    #             py_logger.debug(f"temporal_subset: {temporal_subset}")
+    #             py_logger.debug(f"seq_length: {self.config.seq_length}")
 
-                self.time_index = np.random.randint(
-                    0, time_range - self.config.seq_length, temporal_subset
-                )
+    #             self.time_index = np.random.randint(
+    #                 0, time_range - self.config.seq_length, temporal_subset
+    #             )
 
-            else:
-                # use same time indices for training and validation
-                time_range = self.train_time_range
-                py_logger.debug("Single temporal subset case:")
-                py_logger.debug(f"time_range: {time_range}")
-                py_logger.debug(f"temporal_subset: {self.config.temporal_subset[-1]}")
+    #         else:
+    #             # use same time indices for training and validation
+    #             time_range = self.train_time_range
+    #             py_logger.debug("Single temporal subset case:")
+    #             py_logger.debug(f"time_range: {time_range}")
+    #             py_logger.debug(f"temporal_subset: {self.config.temporal_subset[-1]}")
 
-                self.time_index = np.random.randint(
-                    0, time_range - self.config.seq_length, self.config.temporal_subset[-1]
-                )
-        else:
-            time_range = self.val_time_range if opt is None else self.train_time_range
-            py_logger.debug("No temporal downsampling case:")
-            py_logger.debug(f"time_range: {time_range}")
+    #             self.time_index = np.random.randint(
+    #                 0, time_range - self.config.seq_length, self.config.temporal_subset[-1]
+    #             )
+    #     else:
+    #         time_range = self.val_time_range if opt is None else self.train_time_range
+    #         py_logger.debug("No temporal downsampling case:")
+    #         py_logger.debug(f"time_range: {time_range}")
 
-            self.time_index = np.arange(0, time_range)
+    #         self.time_index = np.arange(0, time_range)
 
-        py_logger.debug(f"Generated time_index shape: {self.time_index.shape}")
-        py_logger.debug(f"Generated time_index max value: {self.time_index.max()}")
-        py_logger.debug(f"Generated time_index min value: {self.time_index.min()}")
+    #     py_logger.debug(f"Generated time_index shape: {self.time_index.shape}")
+    #     py_logger.debug(f"Generated time_index max value: {self.time_index.max()}")
+    #     py_logger.debug(f"Generated time_index min value: {self.time_index.min()}")
 
     # @profile_torch_trainer
     # @measure_gpu_utilization
@@ -835,14 +835,16 @@ class RNNDistributedTrainer(TorchTrainer):
             processing = "multi-gpu"
 
         train_sampler_builder = SamplerBuilder(
+            self.config,
             train_dataset,
-            sampling="random",
+            sampling="temporal-downsampling-random",
             processing=processing,
             sampling_kwargs=sampling_kwargs,
         )
         val_sampler_builder = SamplerBuilder(
+            self.config,
             validation_dataset,
-            sampling="sequential",
+            sampling="temporal-downsampling-sequential",
             processing=processing,
             sampling_kwargs=sampling_kwargs,
         )

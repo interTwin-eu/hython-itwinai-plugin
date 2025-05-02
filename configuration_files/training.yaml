@@ -16,12 +16,12 @@ experiment_name: "training"
 #! change run name for each user on JSC (overwrite will fail due to permissions)
 experiment_run: "hython-plugin3"
 
-work_dir: /p/scratch/intertwin/datasets/eurac/model
+work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model # /p/scratch/intertwin/datasets/eurac/model
 run_id: "unnamed-run"
 
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2019-01-01", "2020-12-31"]
+test_temporal_range: ["2022-01-01", "2022-12-31"]
 
 seed: 10 
 
@@ -29,9 +29,9 @@ seed: 10
 
 model: CudaLSTM
 
-hidden_size: 256
+hidden_size: 128
 dropout: 0.2
-lstm_layers: 2
+lstm_layers: 1
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -67,10 +67,11 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 3
-time_ray: True
+epochs: 30
+time_ray: False
 
-gradient_clip: null
+gradient_clip:
+    max_norm: 1
 
 target_weights: even # null, even, or dict
 
@@ -80,7 +81,7 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 
 # > Donwsampling < 
 
-# spatial downsampling
+# static 
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
@@ -94,23 +95,28 @@ valid_downsampler: #null
 test_downsampler: null
 
 
-# temporal downsampling
+# dynamic 
+dynamic_downsampler:
+    frac_time: 0.5
+    frac_space: null
+
+# ------- DEPRECATED ----------
 downsampling_temporal_dynamic: True
 temporal_downsampling: True
-temporal_subset: [100, 100]
-
+temporal_subset: [150, 150]
+# -----------------------------
 
 # === Data ===
 
 data_lazy_load: False
-dataset: WflowSBM
-num_workers_dataloader: 4
+dataset: WflowSBM_HPC
+num_workers_dataloader: 24
 
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
+    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_static.zarr #/p/scratch/intertwin/datasets/eurac/input/eobs_static.zarr
+    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_dynamic.zarr #/p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
+    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_dynamic.zarr #/p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
   # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
@@ -119,7 +125,7 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  - thetaS
+  # - thetaS
   - thetaR
   - KsatVer
   - c
@@ -139,7 +145,7 @@ mask_variables:
 # Scaling
 
 scaling_variant: minmax
-scaling_use_cached: True
+scaling_use_cached: False
 
 # ==== MODEL LOGGER ========
 #mlflow: 
@@ -187,6 +193,7 @@ training_pipeline:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
@@ -200,6 +207,7 @@ training_pipeline:
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
         #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
+        dynamic_downsampler: ${dynamic_downsampler}
         temporal_downsampling: ${temporal_downsampling}
         temporal_subset: ${temporal_subset}
         seq_length: ${seq_length}
