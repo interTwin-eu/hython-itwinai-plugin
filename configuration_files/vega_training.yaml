@@ -97,14 +97,6 @@ test_downsampler: null
 #  dynamic 
 dynamic_downsampler:
     frac_time: 0.5
-    frac_space: null
-
-# ------- DEPRECATED ----------
-downsampling_temporal_dynamic: True
-temporal_downsampling: True
-temporal_subset: [150, 150]
-# -----------------------------
-
 
 # === Data ===
 data_lazy_load: False
@@ -178,7 +170,6 @@ training:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -200,10 +191,7 @@ training:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
         dynamic_downsampler: ${dynamic_downsampler}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}
@@ -267,7 +255,6 @@ hpo:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -288,9 +275,6 @@ hpo:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}
