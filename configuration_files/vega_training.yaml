@@ -16,7 +16,7 @@
 experiment_name: "vega-train-eurac"
 experiment_run: "vega-train-eurac-1"
 
-work_dir: /ceph/hpc/data/st2301-itwin-users/eurac
+work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
@@ -67,9 +67,10 @@ learning_rate: 0.001
 batch: 512
 
 epochs: 2
-time_ray: True
+time_ray: False
 
-gradient_clip: null
+gradient_clip:
+    max_norm: 1
 
 target_weights: even # null, even, or dict
 
@@ -79,7 +80,7 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 
 # > Donwsampling < 
 
-# spatial downsampling
+# static 
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
@@ -93,15 +94,13 @@ valid_downsampler: #null
 test_downsampler: null
 
 
-# temporal downsampling
-downsampling_temporal_dynamic: True
-temporal_downsampling: True
-temporal_subset: [10, 10]
-
+#  dynamic 
+dynamic_downsampler:
+    frac_time: 0.5
 
 # === Data ===
 data_lazy_load: False
-dataset: WflowSBM
+dataset: WflowSBM_HPC
 num_workers_dataloader: 4
 
 # === Ray HPO ===
@@ -171,7 +170,6 @@ training:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -180,6 +178,7 @@ training:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
@@ -192,9 +191,7 @@ training:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
+        dynamic_downsampler: ${dynamic_downsampler}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}
@@ -258,7 +255,6 @@ hpo:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -279,9 +275,6 @@ hpo:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}

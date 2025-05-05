@@ -16,10 +16,12 @@
 experiment_name: "juwels-train-eurac"
 experiment_run: "juwels-train-eurac-1"
 
+
 work_dir: /p/scratch/intertwin/datasets/eurac/model
+
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2019-01-01", "2020-12-31"]
+test_temporal_range: ["2022-01-01", "2022-12-31"]
 
 seed: 10 
 
@@ -27,9 +29,9 @@ seed: 10
 
 model: CudaLSTM
 
-hidden_size: 256
+hidden_size: 128
 dropout: 0.2
-lstm_layers: 2
+lstm_layers: 1
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -68,7 +70,8 @@ batch: 512
 epochs: 2
 time_ray: True
 
-gradient_clip: null
+gradient_clip:
+    max_norm: 1
 
 target_weights: even # null, even, or dict
 
@@ -78,7 +81,7 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 
 # > Donwsampling < 
 
-# spatial downsampling
+# static 
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
@@ -91,16 +94,12 @@ valid_downsampler: #null
 
 test_downsampler: null
 
-
-# temporal downsampling
-downsampling_temporal_dynamic: True
-temporal_downsampling: True
-temporal_subset: [10, 10]
-
+dynamic_downsampler:
+    frac_time: 0.5
 
 # === Data ===
 data_lazy_load: False
-dataset: WflowSBM
+dataset: WflowSBM_HPC
 num_workers_dataloader: 4
 
 # === Ray HPO ===
@@ -123,7 +122,7 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  - thetaS
+  # - thetaS
   - thetaR
   - KsatVer
   - c
@@ -143,7 +142,7 @@ mask_variables:
 # Scaling
 
 scaling_variant: minmax
-scaling_use_cached: True
+scaling_use_cached: False
 
 # MLFLow
 tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
@@ -170,7 +169,6 @@ training:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -179,6 +177,7 @@ training:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
@@ -191,9 +190,7 @@ training:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
+        dynamic_downsampler: ${dynamic_downsampler}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}
@@ -257,7 +254,6 @@ hpo:
       valid_temporal_range: ${valid_temporal_range}
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
-      downsampling_temporal_dynamic: ${downsampling_temporal_dynamic}
       data_source: ${data_source}
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
@@ -266,6 +262,7 @@ hpo:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
@@ -278,9 +275,7 @@ hpo:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
-        #temporal_downsampling_dynamic: ${downsampling_temporal_dynamic}
-        temporal_downsampling: ${temporal_downsampling}
-        temporal_subset: ${temporal_subset}
+        dynamic_downsampler: ${dynamic_downsampler}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}

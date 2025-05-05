@@ -16,8 +16,6 @@ from itwinai.torch.config import TrainingConfiguration
 
 
 class HythonConfiguration(TrainingConfiguration):
-    temporal_downsampling: bool
-    temporal_subset: List[int]
     seq_length: int
     target_variables: List[str]
     predict_steps: int
