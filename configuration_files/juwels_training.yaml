@@ -14,8 +14,7 @@
 #! change run or exp name for each user (overwrite will fail due to permissions)
 # General configuration
 experiment_name: "juwels-train-eurac"
-experiment_run: "juwels-train-eurac-1"
-
+run_id: "juwels-train-eurac-1"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
@@ -152,7 +151,7 @@ model_logger:
       logger: local
       model_component: model # the main model
       model_name: ${model}
-      model_uri: ${work_dir}/${experiment_name}_${experiment_run}/${model}.pt
+      model_uri: ${work_dir}/${experiment_name}_${run_id}/${model}.pt
       log: True
       load: False
 
@@ -173,7 +172,7 @@ training:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      experiment_run: ${experiment_run}
+      experiment_run: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -181,9 +180,9 @@ training:
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
-        experiment: ${experiment_name}/${experiment_run}
+        experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        experiment_run: ${experiment_run}
+        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -226,7 +225,7 @@ training:
       measure_gpu_data: True
       measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: $(experiment_run)
+      run_id: ${run_id}
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -237,7 +236,7 @@ training:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            run_name: ${experiment_run}
+            run_name: ${run_id}
             log_freq: batch
             tracking_uri: ${tracking_uri}
 
@@ -258,7 +257,7 @@ hpo:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      experiment_run: ${experiment_run}
+      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -266,9 +265,9 @@ hpo:
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
-        experiment: ${experiment_name}/${experiment_run}
+        experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        experiment_run: ${experiment_run}
+        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -314,7 +313,7 @@ hpo:
       measure_gpu_data: True
       measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: $(experiment_run)
+      run_id: ${run_id}
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -325,7 +324,7 @@ hpo:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            run_name: ${experiment_run}
+            run_name: ${run_id}
             log_freq: batch
             tracking_uri: ${tracking_uri}
                     

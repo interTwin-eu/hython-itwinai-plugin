@@ -47,5 +47,5 @@ itwinai exec-pipeline \
 --config-name vega_training \
 num_workers_dataloader=4 \
 experiment_name=ddp-1x4-${USER} \
-experiment_run=ddp-1x4-${timestamp} \
+run_id=ddp-1x4-${timestamp} \
 +pipe_key=hpo"
