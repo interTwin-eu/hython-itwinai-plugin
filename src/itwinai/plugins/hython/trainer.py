@@ -15,7 +15,6 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from hython.models import ModelLogAPI
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
@@ -227,14 +226,8 @@ class RNNDistributedTrainer(TorchTrainer):
         Args:
             self (RNNDistributedTrainer): self
         """
-        py_logger.info("Creating modellogapi")
-        self.model_api = ModelLogAPI(self.config)
-        py_logger.info("ModelLogAPI created")
         if self.config.hython_trainer == "rnntrainer":
-            py_logger.info("Loading model")
             # LOAD MODEL
-            self.model_logger = self.model_api.get_model_logger("model")
-            py_logger.info("Model logger loaded")
             py_logger.info(f"instantiating model {self.model_class_name}")
             self.model = self.model_class(self.config)
             if self.model is None:
@@ -566,17 +559,12 @@ class RNNDistributedTrainer(TorchTrainer):
 
         epoch_loss = running_batch_loss / len(dataloader)
         metric = self.compute_metrics()
-        
+
         return epoch_loss, metric
 
     # @profile_torch_trainer
     # @measure_gpu_utilization
     def train(self) -> None:
-        """Override train_val version of hython to support distributed strategy.
-
-        Returns:
-            None
-        """
         # Tracking epoch times for scaling test
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
@@ -603,7 +591,7 @@ class RNNDistributedTrainer(TorchTrainer):
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
 
         best_loss = float("inf")
-        best_model = None
+
         progress_bar = tqdm(
             range(self.current_epoch, self.epochs),
             desc="Epochs",
@@ -630,12 +618,12 @@ class RNNDistributedTrainer(TorchTrainer):
             )
             if not self.strategy.is_main_worker:
                 # exit if not main worker
+                self.ray_report(metrics={})
                 continue
 
             avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
             if avg_val_loss < best_loss:
                 best_loss = avg_val_loss
-                best_model = self.model.state_dict()
                 # ! TODO: In hython, make loss serializable
                 # best_ckpt_path = self.save_checkpoint(
                 #     name="best_model",
@@ -662,7 +650,7 @@ class RNNDistributedTrainer(TorchTrainer):
                         new_metric_key = period + "_" + metric_key
                         metric_history_[new_metric_key] = [metric_value]
 
-            avg_metrics = pd.DataFrame(metric_history_).mean().to_dict() # type: ignore
+            avg_metrics = pd.DataFrame(metric_history_).mean().to_dict()
             for m_name, m_val in avg_metrics.items():
                 self.log(
                     item=m_val,
@@ -685,7 +673,9 @@ class RNNDistributedTrainer(TorchTrainer):
             )
 
             epoch_time = default_timer() - epoch_start_time
-            epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time) # type: ignore
+            epoch_time_tracker.add_epoch_time(
+                self.current_epoch + 1, epoch_time
+            )
             if self.time_ray:
                 # time and log the ray_report call
                 self._time_and_log(
@@ -704,33 +694,11 @@ class RNNDistributedTrainer(TorchTrainer):
                 self.test_epoch()
 
             if self.strategy.is_distributed:  # only main worker
-                assert epoch_time_tracker is not None # type: ignore
+                assert epoch_time_tracker is not None  # type: ignore
                 epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time) # type: ignore
-
-        if self.strategy.is_main_worker:
-            # Save best model in ml flow
-            epoch_time_tracker.save() # type: ignore
-            if best_model is not None:
-                self.model.load_state_dict(best_model)
-
-            # MODEL LOGGING
-            model_log_names = self.model_api.get_model_log_names()
-            for module_name, model_class_name in model_log_names.items():
-                item = (
-                    self.model
-                    if module_name == "model"
-                    else self.model.get_submodule(module_name)
-                )
-                if self.model_logger == "mlflow":
-                    self.log(
-                        item=item,
-                        identifier=model_class_name,
-                        kind="model",
-                        registered_model_name=model_class_name,
-                    )
-                else:
-                    self.model_api.log_model(module_name, item)
+                epoch_time_tracker.add_epoch_time(
+                        self.current_epoch + 1, epoch_time
+                )  # type: ignore
 
     def create_dataloaders(
         self,
