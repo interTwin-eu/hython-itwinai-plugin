@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "itwinai-hython-plugin"
 version = "0.0.1"
 description = "Hython plugin for itwinai"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 readme = "README.md"
 license = { file = "LICENSE" }
 authors = [
