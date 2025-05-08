@@ -569,7 +569,7 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
             try:
-                num_nodes = int(os.environ.get("SLURM_NNODES"))  # type: ignore
+                num_nodes = int(os.environ.get("SLURM_NNODES", 1))  # type: ignore
             except Exception:
                 raise ValueError(
                     f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
