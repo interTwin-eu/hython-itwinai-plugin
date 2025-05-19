@@ -3,7 +3,7 @@
 # SLURM jobscript for JSC systems
 
 # Job configuration
-#SBATCH --job-name=ddp-1x4
+#SBATCH --job-name=distributed_training
 #SBATCH --account=intertwin
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
@@ -131,7 +131,7 @@ function ray-launcher(){
   # Run command without srun
   # if you want the number of workers to be adaptive during distributed training append this:
   # training_pipeline.steps.training_step.ray_scaling_config.num_workers=$(($SLURM_GPUS_PER_NODE * $SLURM_NNODES))
-  $1
+  $1 +pipe_key=hpo
 }
 
 function torchrun-launcher(){
@@ -145,14 +145,14 @@ function torchrun-launcher(){
     --rdzv_backend=c10d \
     --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
     --no-python \
-    $1"
+    $1 +pipe_key=training"
 }
 
 function srun-launcher(){
   srun --cpu-bind=none --ntasks-per-node=$SLURM_GPUS_PER_NODE \
     --cpus-per-task=$(($SLURM_CPUS_PER_TASK / $SLURM_GPUS_PER_NODE)) \
     --ntasks=$(($SLURM_GPUS_PER_NODE * $SLURM_NNODES)) \
-    $1
+    $1 +pipe_key=training
 }
 
 # Dual echo on both stdout and stderr
@@ -204,3 +204,5 @@ else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
   exit 1
 fi
+
+

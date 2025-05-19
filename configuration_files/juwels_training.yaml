@@ -110,9 +110,9 @@ trials: 2
 
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/eobs_dynamic.zarr
+    static_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_full_static.zarr
+    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_full_dynamic.zarr
+    target_variables: /p/scratch/intertwin/datasets/eurac/input/emo1_full_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
