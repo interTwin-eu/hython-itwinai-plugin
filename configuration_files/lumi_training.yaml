@@ -172,7 +172,7 @@ training:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      experiment_run: ${run_id}
+      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}

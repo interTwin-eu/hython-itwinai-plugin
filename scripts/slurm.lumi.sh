@@ -4,7 +4,7 @@
 
 # Job configuration
 #SBATCH --job-name=distributed_training
-#SBATCH --account=project_465001592
+#SB TCH --account=project_465001592
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
 #SBATCH --output=job.out
@@ -14,8 +14,8 @@
 # Resources allocation
 #SBATCH --partition=small-g
 #SBATCH --nodes=2
-#SBATCH --gpus-per-node=4
-#SBATCH --cpus-per-task=32
+#SBATCH --gpus-per-node=2
+#SBATCH --cpus-per-task=16
 #SBATCH --exclusive
 #SBATCH --mem=256G
 
