@@ -13,7 +13,7 @@
 
 #! change run or exp name for each user (overwrite will fail due to permissions)
 # General configuration
-experiment_name: "juwels-train-eurac"
+experiment_name: "hpo-linus"
 run_id: "juwels-train-eurac-1"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
@@ -94,7 +94,7 @@ valid_downsampler: #null
 test_downsampler: null
 
 dynamic_downsampler:
-    frac_time: 0.5
+    frac_time: 0.2
 
 # === Data ===
 data_lazy_load: False
@@ -105,7 +105,7 @@ num_workers_dataloader: 4
 num_workers_per_trial: 1
 cpu_per_worker: 6
 gpu_per_worker: 1 # 0. - 1
-trials: 4
+trials: 2
 
 
 data_source:

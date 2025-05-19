@@ -158,7 +158,7 @@ model_logger:
 training:
   _target_: itwinai.pipeline.Pipeline
   steps:
-    - _target_: src.itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
+    - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
       hython_trainer: ${hython_trainer}
       dynamic_inputs: ${dynamic_inputs}
       static_inputs: ${static_inputs}
@@ -177,7 +177,7 @@ training:
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
-    - _target_: src.itwinai.plugins.hython.trainer.RNNDistributedTrainer
+    - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -243,7 +243,7 @@ training:
 hpo:
   _target_: itwinai.pipeline.Pipeline
   steps:
-    - _target_: src.itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
+    - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
       hython_trainer: ${hython_trainer}
       dynamic_inputs: ${dynamic_inputs}
       static_inputs: ${static_inputs}
@@ -262,7 +262,7 @@ hpo:
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
-    - _target_: src.itwinai.plugins.hython.trainer.RNNDistributedTrainer
+    - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
