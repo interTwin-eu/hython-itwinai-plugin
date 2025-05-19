@@ -19,6 +19,11 @@ from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.distributed import suppress_workers_print
+
+from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
+from itwinai.components import monitor_exec
+from itwinai.torch.profiling.profiler import profile_torch_trainer
+
 from itwinai.loggers import EpochTimeTracker, Logger
 from itwinai.torch.distributed import (
     HorovodStrategy,
@@ -112,7 +117,7 @@ class RNNDistributedTrainer(TorchTrainer):
         self.epoch_valid_masks = None
 
     @suppress_workers_print
-    # @profile_torch_trainer
+    @monitor_exec
     def execute(
         self,
         train_dataset: Dataset,
@@ -562,8 +567,8 @@ class RNNDistributedTrainer(TorchTrainer):
 
         return epoch_loss, metric
 
-    # @profile_torch_trainer
-    # @measure_gpu_utilization
+    @profile_torch_trainer
+    @measure_gpu_utilization
     def train(self) -> None:
         # Tracking epoch times for scaling test
         if self.strategy.is_main_worker:

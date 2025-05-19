@@ -29,14 +29,14 @@ export HYDRA_FULL_ERROR=1
 #     /users/eickhoff/hython-itwinai-plugin/scripts/slurm.lumi.sh
 
 # DeepSpeed itwinai
-DIST_MODE="deepspeed"
-RUN_NAME="deepspeed-itwinai"
-TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name lumi_training strategy=deepspeed"
-sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
-    --job-name="$RUN_NAME-n$N" \
-    --output="logs_slurm/job-$RUN_NAME-n$N.out" \
-    --error="logs_slurm/job-$RUN_NAME-n$N.err" \
-    /users/eickhoff/hython-itwinai-plugin/scripts/slurm.lumi.sh
+# DIST_MODE="deepspeed"
+# RUN_NAME="deepspeed-itwinai"
+# TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name lumi_training strategy=deepspeed"
+# sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
+#     --job-name="$RUN_NAME-n$N" \
+#     --output="logs_slurm/job-$RUN_NAME-n$N.out" \
+#     --error="logs_slurm/job-$RUN_NAME-n$N.err" \
+#     /users/eickhoff/hython-itwinai-plugin/scripts/slurm.lumi.sh
 
 # Horovod itwinai
 DIST_MODE="horovod"
