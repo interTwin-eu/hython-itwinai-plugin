@@ -9,7 +9,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=job.out
 #SBATCH --error=job.err
-#SBATCH --time=01:59:50
+#SBATCH --time=00:50:50
 
 # Resources allocation
 #SBATCH --partition=develbooster

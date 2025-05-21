@@ -102,7 +102,7 @@ dataset: WflowSBM_HPC
 num_workers_dataloader: 4
 
 # === Ray HPO ===
-num_workers_per_trial: 1
+num_workers_per_trial: 2
 cpu_per_worker: 6
 gpu_per_worker: 1 # 0. - 1
 trials: 2
@@ -110,9 +110,9 @@ trials: 2
 
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_full_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_full_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/emo1_full_dynamic.zarr
+    static_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_static.zarr
+    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
+    target_variables: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 

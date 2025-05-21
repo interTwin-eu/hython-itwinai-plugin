@@ -9,7 +9,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=job.out
 #SBATCH --error=job.err
-#SBATCH --time=01:59:50
+#SBATCH --time=00:55:50
 
 # Resources allocation
 #SBATCH --partition=small-g
@@ -286,25 +286,25 @@ if [ "$DIST_MODE" == "ddp" ] ; then
   echo "DDP training: $TRAINING_CMD"
   torchrun-launcher "$TRAINING_CMD"
 
-  separation
-
-  ray-launcher "$TRAINING_CMD"
+  # separation
+  #
+  # ray-launcher "$TRAINING_CMD"
   
 elif [ "$DIST_MODE" == "deepspeed" ] ; then
   echo "DEEPSPEED training: $TRAINING_CMD"
   torchrun-launcher "$TRAINING_CMD"
 
-  separation
-
-  ray-launcher "$TRAINING_CMD"
+  # separation
+  #
+  # ray-launcher "$TRAINING_CMD"
 
 elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  separation
-
-  ray-launcher "$TRAINING_CMD"
+  # separation
+  #
+  # ray-launcher "$TRAINING_CMD"
 
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"

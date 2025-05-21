@@ -10,7 +10,7 @@
 # - Linus Eickhoff <linus.maximilian.eickhoff@cern.ch> - CERN
 # --------------------------------------------------------------------------------------
 
-export CONTAINER_PATH="/project/project_465001592/hython-itwinai-plugin-containers/hython-itwinai-amd-2.sif"
+export CONTAINER_PATH="/project/project_465001592/hython-itwinai-plugin-containers/hython-itwinai-amd.sif"
 
 # Clear SLURM logs (*.out and *.err files)
 rm -rf logs_slurm checkpoints* mllogs* ray_checkpoints logs_torchrun
