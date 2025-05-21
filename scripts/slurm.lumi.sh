@@ -286,25 +286,25 @@ if [ "$DIST_MODE" == "ddp" ] ; then
   echo "DDP training: $TRAINING_CMD"
   torchrun-launcher "$TRAINING_CMD"
 
-  # separation
-  #
-  # ray-launcher "$TRAINING_CMD"
+  separation
+
+  ray-launcher "$TRAINING_CMD"
   
 elif [ "$DIST_MODE" == "deepspeed" ] ; then
   echo "DEEPSPEED training: $TRAINING_CMD"
   torchrun-launcher "$TRAINING_CMD"
 
-  # separation
-  #
-  # ray-launcher "$TRAINING_CMD"
+  separation
+
+  ray-launcher "$TRAINING_CMD"
 
 elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  # separation
-  #
-  # ray-launcher "$TRAINING_CMD"
+  separation
+
+  ray-launcher "$TRAINING_CMD"
 
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
