@@ -18,17 +18,15 @@ from tqdm.auto import tqdm
 from hython.models import get_model_class as get_hython_model
 from hython.sampler import SamplerBuilder
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
-from itwinai.distributed import suppress_workers_print
-
-from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.components import monitor_exec
-from itwinai.torch.profiling.profiler import profile_torch_trainer
-
+from itwinai.distributed import suppress_workers_print
 from itwinai.loggers import EpochTimeTracker, Logger
 from itwinai.torch.distributed import (
     HorovodStrategy,
     NonDistributedStrategy,
 )
+from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
+from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
 
 from .config import HythonConfiguration
