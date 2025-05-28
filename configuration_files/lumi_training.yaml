@@ -13,10 +13,10 @@
 
 #! change run or exp name for each user (overwrite will fail due to permissions)
 # General configuration
-experiment_name: "hpo-linus"
-run_id: "juwels-train-eurac-1"
+experiment_name: "lumi-train-eurac"
+run_id: "lumi-train-eurac-1"
 
-work_dir: /p/scratch/intertwin/datasets/eurac/model
+work_dir: /scratch/project_465001592/eurac/model/ # TODO
 
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
@@ -41,7 +41,7 @@ find_unused_parameters: False
   
 # === Training ===
 
-strategy: ddp
+strategy: ddp 
 
 hython_trainer: rnntrainer
 
@@ -110,9 +110,9 @@ trials: 2
 
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
+    static_inputs: /scratch/project_465001592/eurac/emo1_static.zarr
+    dynamic_inputs: /scratch/project_465001592/eurac/emo1_dynamic.zarr
+    target_variables: /scratch/project_465001592/eurac/emo1_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 

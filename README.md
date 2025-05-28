@@ -32,5 +32,8 @@ usually takes around 20 minutes to complete.
 You can launch the training using `itwinai`'s `exec-pipeline` command as follows:
 
 ```bash
-itwinai exec-pipeline --config-path configuration_files --config-name training
+itwinai exec-pipeline --config-path configuration_files --config-name <config-name>
 ```
+
+We currently offer premade configs for `juwels`, `vega`, and `lumi`. You can find them in the
+`configuration_files` directory.
