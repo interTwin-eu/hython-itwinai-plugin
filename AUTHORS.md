@@ -2,8 +2,8 @@
 
 ## Maintainers
 
-Matteo Bunino [matteo.bunino@cern.ch](mailto:matteo.bunino@cern.ch)
-Linus Eickhoff [linus.maximilian.eickhoff@cern.ch](mailto:linus.maximilian.eickhoff@cern.ch)
+- Matteo Bunino [matteo.bunino@cern.ch](mailto:matteo.bunino@cern.ch)
+- Linus Eickhoff [linus.maximilian.eickhoff@cern.ch](mailto:linus.maximilian.eickhoff@cern.ch)
 
 ## Contributors
 
