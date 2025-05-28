@@ -42,7 +42,7 @@ class RNNDistributedTrainer(TorchTrainer):
         config (Union[Dict, TrainingConfiguration]): training configuration
             containing hyperparameters.
         epochs (int): number of training epochs.
-        model (nn.Module | None, optional): model to train.
+        model (str): model to train.
             Defaults to None.
         strategy (Literal['ddp', 'deepspeed', 'horovod'], optional):
             distributed strategy. Defaults to 'ddp'.
@@ -64,7 +64,7 @@ class RNNDistributedTrainer(TorchTrainer):
     """
     config: HythonConfiguration
     lr_scheduler: LRScheduler
-    model: nn.Module
+    model: str
     loss: _Loss
     optimizer: Optimizer
     train_time_range: int = 0
