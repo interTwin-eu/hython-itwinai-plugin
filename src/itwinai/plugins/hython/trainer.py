@@ -43,7 +43,6 @@ class RNNDistributedTrainer(TorchTrainer):
             containing hyperparameters.
         epochs (int): number of training epochs.
         model (str): model to train.
-            Defaults to None.
         strategy (Literal['ddp', 'deepspeed', 'horovod'], optional):
             distributed strategy. Defaults to 'ddp'.
         validation_every (int | None, optional): run a validation epoch
