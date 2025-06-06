@@ -226,7 +226,6 @@ training:
       measure_gpu_data: True
       measure_epoch_time: True
       torch_profiling: False
-      py_spy_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -311,7 +310,6 @@ hpo:
       measure_gpu_data: True
       measure_epoch_time: True
       torch_profiling: False
-      py_spy_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -345,7 +343,7 @@ hpo:
         #   reduction_factor: 6
         #   brackets: 1
       ray_run_config:
-        _target_: ray.train.RunConfig
+        _target_: ray.tune.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
         # job is launched using the itwinai custom OmegaConf resolver ${itwinai.cwd:}
         storage_path: ${itwinai.cwd:}/ray_checkpoints
