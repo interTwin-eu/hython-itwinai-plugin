@@ -77,13 +77,10 @@ From: /home/linus/lumi-rocm-pytorch.sif
     cd /app/itwinai
 
     uv pip install --no-cache-dir --no-binary=horovod \
-        .[torch] \
+        .[torch,amd] \
         --extra-index-url https://download.pytorch.org/whl/rocm6.1 \
         "prov4ml[amd]@git+https://github.com/matbun/ProvML@new-main" \
         pytest pytest-xdist psutil wheel
-
-    # AMD monitoring tool
-    uv pip install --no-cache-dir amdsmi
 
     cd /app/hython-itwinai-plugin
 
