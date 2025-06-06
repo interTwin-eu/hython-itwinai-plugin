@@ -66,7 +66,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
+epochs: 10
 time_ray: True
 
 gradient_clip:
@@ -99,11 +99,11 @@ dynamic_downsampler:
 # === Data ===
 data_lazy_load: False
 dataset: WflowSBM_HPC
-num_workers_dataloader: 4
+num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 2
-cpu_per_worker: 6
+cpu_per_worker: 12
 gpu_per_worker: 1 # 0. - 1
 trials: 2
 
@@ -172,7 +172,6 @@ training:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -182,7 +181,6 @@ training:
       config:
         experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -220,12 +218,13 @@ training:
         # model logger
         model_logger: ${model_logger}
         
+      run_id: ${run_id}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: ${run_id}
+      torch_profiling: False
+      py_spy_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -257,7 +256,6 @@ hpo:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -267,7 +265,6 @@ hpo:
       config:
         experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -307,13 +304,14 @@ hpo:
         # model logger
         model_logger: ${model_logger}
         
+      run_id: ${run_id}
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: ${run_id}
+      torch_profiling: False
+      py_spy_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
