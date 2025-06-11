@@ -23,7 +23,6 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         scaling_variant: str,
         scaling_use_cached: bool,
         experiment_name: str,
-        run_id: str,
         data_source: dict,
         work_dir: str,
         dynamic_inputs: List[str] | None = None,

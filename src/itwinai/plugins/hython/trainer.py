@@ -568,6 +568,7 @@ class RNNDistributedTrainer(TorchTrainer):
     @measure_gpu_utilization
     def train(self) -> None:
         # Tracking epoch times for scaling test
+        epoch_time_tracker: EpochTimeTracker | None = None
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
             try:
@@ -578,7 +579,7 @@ class RNNDistributedTrainer(TorchTrainer):
                     "Make sure SLURM_NNODES is set properly."
                     )
 
-            epoch_time_output_dir = Path("scalability-metrics/epoch-time")
+            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
@@ -586,6 +587,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 strategy_name=self.strategy.name,
                 save_path=epoch_time_output_path,
                 num_nodes=num_nodes,
+                should_log=self.measure_epoch_time,
             )
 
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
@@ -674,10 +676,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 step=self.current_epoch,
             )
 
-            epoch_time = default_timer() - epoch_start_time
-            epoch_time_tracker.add_epoch_time(
-                self.current_epoch + 1, epoch_time
-            )
             if self.time_ray:
                 # time and log the ray_report call
                 self._time_and_log(
@@ -695,8 +693,8 @@ class RNNDistributedTrainer(TorchTrainer):
             if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
                 self.test_epoch()
 
-            if self.strategy.is_distributed:  # only main worker
-                assert epoch_time_tracker is not None  # type: ignore
+            if self.strategy.is_distributed:  # only main worker and for distributed
+                assert epoch_time_tracker is not None
                 epoch_time = default_timer() - epoch_start_time
                 epoch_time_tracker.add_epoch_time(
                         self.current_epoch + 1, epoch_time
