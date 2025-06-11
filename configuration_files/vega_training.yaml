@@ -260,6 +260,7 @@ hpo:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:

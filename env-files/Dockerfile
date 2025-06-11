@@ -8,7 +8,6 @@ WORKDIR /app
 # RUN rm -rf tests src pyproject.toml
 
 # Copy your scripts
-COPY configuration_files/ configuration_files/
 COPY src/ src/
 COPY pyproject.toml pyproject.toml
 
