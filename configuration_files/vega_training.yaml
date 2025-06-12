@@ -14,13 +14,13 @@
 #! change run or exp name for each user on JSC (overwrite will fail due to permissions)
 # General configuration
 experiment_name: "vega-train-eurac"
-run_id: "vega-train-eurac-1"
+run_id: "vega-train-eurac-10"
 
 work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
-train_temporal_range: ["2019-01-01", "2019-12-31"]
+train_temporal_range: ["2017-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2019-01-01", "2020-12-31"]
+test_temporal_range: ["2022-01-01", "2022-12-31"]
 
 seed: 10 
 
@@ -30,7 +30,7 @@ model: CudaLSTM
 
 hidden_size: 256
 dropout: 0.2
-lstm_layers: 2
+lstm_layers: 1
 lstm_batch_norm: False
 
 model_head_layer: regression # distr_normal
@@ -48,7 +48,7 @@ hython_trainer: rnntrainer
 loss_fn:
   _target_: hython.losses.RMSELoss
 metric_fn:
-  _target_: hython.metrics.MSEMetric
+  _target_: hython.metrics.MeanSquaredError
 # TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
 metric_name: MSEMetric
 
@@ -66,8 +66,8 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
-time_ray: False
+epochs: 20
+time_ray: True
 
 gradient_clip:
     max_norm: 1
@@ -84,37 +84,37 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.01
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.01
 
 test_downsampler: null
 
 
 #  dynamic 
 dynamic_downsampler:
-    frac_time: 0.5
+    frac_time: 0.1
 
 # === Data ===
 data_lazy_load: False
 dataset: WflowSBM_HPC
-num_workers_dataloader: 4
+num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 1
 cpu_per_worker: 6
-gpu_per_worker: 1 # 0. - 1
-trials: 4
+gpu_per_worker: 0.5 # 0. - 1
+trials: 80
 
 
 data_source:
   file:
-    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_static.zarr
-    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_dynamic.zarr
-    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/eobs_dynamic.zarr
+    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_static.zarr
+    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_dynamic.zarr
+    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/emo1_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
@@ -123,10 +123,15 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  - thetaS
   - thetaR
   - KsatVer
   - c
+  # - f
+  # - M
+  # - RootingDepth
+  # - Swood
+  # - Sl
+  # - Kext
 
 dynamic_inputs:
   - precip
@@ -135,6 +140,7 @@ dynamic_inputs:
   
 target_variables:
   - vwc
+  #- actevap
 
 mask_variables:
   - mask_missing
@@ -157,7 +163,7 @@ model_logger:
       log: True
       load: False
 
-training:
+training_pipeline:
   _target_: itwinai.pipeline.Pipeline
   steps:
     - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
@@ -225,7 +231,7 @@ training:
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
+      measure_communication_overhead: False
       measure_epoch_time: True
       run_id: $(run_id)
       random_seed: ${seed}
@@ -263,6 +269,7 @@ hpo:
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
+      seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
@@ -275,6 +282,7 @@ hpo:
         num_workers_dataloader: ${num_workers_dataloader}
         pin_gpu_memory: True
         hython_trainer: ${hython_trainer}
+        dynamic_downsampler: ${dynamic_downsampler}
         seq_length: ${seq_length}
         target_variables: ${target_variables}
         dynamic_inputs: ${dynamic_inputs}
@@ -311,7 +319,7 @@ hpo:
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
+      measure_communication_overhead: False
       measure_epoch_time: True
       run_id: $(run_id)
       random_seed: ${seed}
@@ -338,14 +346,14 @@ hpo:
       ray_tune_config:
         _target_: ray.tune.TuneConfig
         num_samples: ${trials}
-        scheduler: null
-        #   _target_: ray.tune.schedulers.ASHAScheduler
-        #   metric: loss
-        #   mode: min
-        #   max_t: 5
-        #   grace_period: 2
-        #   reduction_factor: 6
-        #   brackets: 1
+        scheduler:
+          _target_: ray.tune.schedulers.ASHAScheduler
+          metric: loss
+          mode: min
+          max_t: 25
+          grace_period: 10
+          reduction_factor: 6
+          brackets: 1
       ray_run_config:
         _target_: ray.train.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
@@ -368,13 +376,13 @@ hpo:
           upper: 512
         dropout:
           type: choice
-          categories: [0.1, 0.2, 0.3, 0.4, 0.5]
+          categories: [0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9]
         seq_length:
           type: qrandint
-          lower: 90
-          upper: 365
-          q: 30
-        interval_value:
-          type: choice
-          categories: [3, 5, 10]
+          lower: 30
+          upper: 360
+          q: 60
+        # interval_value:
+        #   type: choice
+        #   categories: [3, 5, 10]
         

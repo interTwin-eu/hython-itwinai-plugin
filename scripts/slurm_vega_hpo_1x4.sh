@@ -4,7 +4,7 @@
 #SBATCH --job-name=ddp-1x4
 #SBATCH --account=s24r05-03-users 
 #SBATCH --partition=gpu
-#SBATCH --time=00:30:00
+#SBATCH --time=03:30:00
 
 #SBATCH --output=slurm_job_logs/vega-ddp-1x4.out
 #SBATCH --error=slurm_job_logs/vega-ddp-1x4.err
@@ -13,7 +13,8 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
-#SBATCH --cpus-per-gpu=8
+#SBATCH --cpus-per-gpu=32
+#SBATCH --mem=256G
 #SBATCH --exclusive
 
 # Pre-execution command
@@ -26,7 +27,7 @@ ml GCCcore/13.3.0 \
     OpenMPI \
     mpi4py \
     OpenSSL/3
-source .venv/bin/activate
+#source .venv/bin/activate
 timestamp=$(date +%s)
 export OMP_NUM_THREADS=4
 export HYDRA_FULL_ERROR=1
@@ -37,7 +38,7 @@ bash -c "ray start \
 --head \
 --node-ip-address=localhost \
 --port=7639 \
---num-cpus=32 \
+--num-cpus=128 \
 --num-gpus=4 \
 --dashboard-host=0.0.0.0 \
 --dashboard-port=8265 \
@@ -45,7 +46,7 @@ bash -c "ray start \
 itwinai exec-pipeline \
 --config-path configuration_files \
 --config-name vega_training \
-num_workers_dataloader=4 \
-experiment_name=ddp-1x4-${USER} \
-run_id=ddp-1x4-${timestamp} \
+num_workers_dataloader=8 \
+experiment_name=ddp-1x4-wvcactevap-${USER} \
+run_id=ddp-1x4-wvcactevap-${timestamp} \
 +pipe_key=hpo"
