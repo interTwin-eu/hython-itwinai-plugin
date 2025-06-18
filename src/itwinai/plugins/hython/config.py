@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, Union
 
 from torch.nn.modules.loss import _Loss
 
-from hython.metrics import Metric
+from hython.metrics import CustomMetric, TorchMetric
 from itwinai.torch.config import TrainingConfiguration
 
 
@@ -22,7 +22,7 @@ class HythonConfiguration(TrainingConfiguration):
     target_weights: Union[str, Dict[str, float]] | None = None
     gradient_clip: Dict[str, Any] | None = None
     model_head_layer: str | None = None
-    metric_fn: Metric | None = None
+    metric_fn: CustomMetric | TorchMetric | None = None
     seed: int | None = None
     model_path: str | None = None
     model_head_activation: str
