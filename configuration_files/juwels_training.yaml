@@ -66,7 +66,7 @@ learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
+epochs: 5
 time_ray: True
 
 gradient_clip:
@@ -99,11 +99,11 @@ dynamic_downsampler:
 # === Data ===
 data_lazy_load: False
 dataset: WflowSBM_HPC
-num_workers_dataloader: 4
+num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 2
-cpu_per_worker: 6
+cpu_per_worker: 12
 gpu_per_worker: 1 # 0. - 1
 trials: 2
 
@@ -172,7 +172,6 @@ training:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -182,7 +181,6 @@ training:
       config:
         experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -220,12 +218,12 @@ training:
         # model logger
         model_logger: ${model_logger}
         
+      run_id: ${run_id}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: ${run_id}
+      torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -257,7 +255,6 @@ hpo:
       scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
-      run_id: ${run_id}
       work_dir: ${work_dir}
       train_downsampler: ${train_downsampler}
       valid_downsampler: ${valid_downsampler}
@@ -267,7 +264,6 @@ hpo:
       config:
         experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
-        run_id: ${run_id}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -285,8 +281,6 @@ hpo:
         target_weights: ${target_weights}
 
         # model config
-
-
         hidden_size: ${hidden_size}
         dropout: ${dropout}
         lstm_layers: ${lstm_layers}
@@ -307,15 +301,15 @@ hpo:
         # model logger
         model_logger: ${model_logger}
         
+      run_id: ${run_id}
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
       measure_gpu_data: True
-      measure_communication_overhead: True
       measure_epoch_time: True
-      run_id: ${run_id}
+      torch_profiling: False
       random_seed: ${seed}
-      profiling_wait_epochs: 1
+      profiling_wait_epochs: 0
       profiling_warmup_epochs: 1
       logger:
         _target_: itwinai.loggers.LoggersCollection
@@ -347,7 +341,7 @@ hpo:
         #   reduction_factor: 6
         #   brackets: 1
       ray_run_config:
-        _target_: ray.train.RunConfig
+        _target_: ray.tune.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
         # job is launched using the itwinai custom OmegaConf resolver ${itwinai.cwd:}
         storage_path: ${itwinai.cwd:}/ray_checkpoints

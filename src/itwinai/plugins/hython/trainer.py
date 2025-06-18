@@ -42,8 +42,7 @@ class RNNDistributedTrainer(TorchTrainer):
         config (Union[Dict, TrainingConfiguration]): training configuration
             containing hyperparameters.
         epochs (int): number of training epochs.
-        model (nn.Module | None, optional): model to train.
-            Defaults to None.
+        model (str): model to train.
         strategy (Literal['ddp', 'deepspeed', 'horovod'], optional):
             distributed strategy. Defaults to 'ddp'.
         validation_every (int | None, optional): run a validation epoch
@@ -64,7 +63,7 @@ class RNNDistributedTrainer(TorchTrainer):
     """
     config: HythonConfiguration
     lr_scheduler: LRScheduler
-    model: nn.Module
+    model: str
     loss: _Loss
     optimizer: Optimizer
     train_time_range: int = 0
@@ -569,6 +568,7 @@ class RNNDistributedTrainer(TorchTrainer):
     @measure_gpu_utilization
     def train(self) -> None:
         # Tracking epoch times for scaling test
+        epoch_time_tracker: EpochTimeTracker | None = None
         if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
             try:
@@ -579,7 +579,7 @@ class RNNDistributedTrainer(TorchTrainer):
                     "Make sure SLURM_NNODES is set properly."
                     )
 
-            epoch_time_output_dir = Path("scalability-metrics/epoch-time")
+            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
@@ -587,6 +587,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 strategy_name=self.strategy.name,
                 save_path=epoch_time_output_path,
                 num_nodes=num_nodes,
+                should_log=self.measure_epoch_time,
             )
 
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
@@ -619,26 +620,54 @@ class RNNDistributedTrainer(TorchTrainer):
                 "gather_loss_time_s_per_epoch",
                 step=self.current_epoch,
             )
-            if not self.strategy.is_main_worker:
-                # exit if not main worker
-                self.ray_report(metrics={})
-                continue
+            if self.strategy.is_main_worker:
+                avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
+                if avg_val_loss < best_loss:
+                    best_loss = avg_val_loss
+                    # ! TODO: In hython, make loss serializable
+                    # best_ckpt_path = self.save_checkpoint(
+                    #     name="best_model",
+                    #     best_validation_metric=avg_val_loss,
+                    #     force=True,
+                    # )
+                    self.best_validation_metric = avg_val_loss
 
-            avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
-            if avg_val_loss < best_loss:
-                best_loss = avg_val_loss
-                # ! TODO: In hython, make loss serializable
-                # best_ckpt_path = self.save_checkpoint(
-                #     name="best_model",
-                #     best_validation_metric=avg_val_loss,
-                #     force=True,
-                # )
-                self.best_validation_metric = avg_val_loss
+                self.log(
+                    item=avg_val_loss.item(),
+                    identifier="avg_val_loss_per_epoch",
+                    kind="metric",
+                    step=self.current_epoch,
+                )
 
             # Report validation metrics to Ray (useful for tuning!)
             metric_name = _get_tuning_metric_name(self.ray_tune_config)
             if metric_name is None:
                 raise ValueError("Could not find a metric in the TuneConfig")
+
+            if self.time_ray:
+                # time and log the ray_report call
+                self._time_and_log(
+                    lambda: self.ray_report(
+                        metrics={"loss": val_loss.item(), "train_loss": train_loss.item()},
+                    ),
+                    "ray_report_time_s_per_epoch",
+                    step=self.current_epoch,
+                )
+            else:
+                self.ray_report(
+                    metrics={"loss": val_loss.item(), "train_loss": train_loss.item()},
+                )
+
+            if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
+                self.test_epoch()
+
+            # only main worker and for distributed
+            if self.strategy.is_main_worker and self.strategy.is_distributed:
+                assert epoch_time_tracker is not None
+                epoch_time = default_timer() - epoch_start_time
+                epoch_time_tracker.add_epoch_time(
+                        self.current_epoch + 1, epoch_time
+                )  # type: ignore
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
@@ -668,40 +697,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 kind="metric",
                 step=self.current_epoch,
             )
-            self.log(
-                item=avg_val_loss.item(),
-                identifier="val_loss_per_epoch",
-                kind="metric",
-                step=self.current_epoch,
-            )
 
-            epoch_time = default_timer() - epoch_start_time
-            epoch_time_tracker.add_epoch_time(
-                self.current_epoch + 1, epoch_time
-            )
-            if self.time_ray:
-                # time and log the ray_report call
-                self._time_and_log(
-                    lambda: self.ray_report(
-                        metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
-                    ),
-                    "ray_report_time_s_per_epoch",
-                    step=self.current_epoch,
-                )
-            else:
-                self.ray_report(
-                    metrics={"loss": avg_val_loss.item(), "train_loss": train_loss.item()},
-                )
-
-            if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
-                self.test_epoch()
-
-            if self.strategy.is_distributed:  # only main worker
-                assert epoch_time_tracker is not None  # type: ignore
-                epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(
-                        self.current_epoch + 1, epoch_time
-                )  # type: ignore
 
     def create_dataloaders(
         self,
