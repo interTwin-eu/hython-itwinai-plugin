@@ -48,7 +48,7 @@ hython_trainer: rnntrainer
 loss_fn:
   _target_: hython.losses.RMSELoss
 metric_fn:
-  _target_: hython.metrics.MSEMetric
+  _target_: hython.metrics.MeanSquaredError
 # TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
 metric_name: MSEMetric
 
@@ -140,10 +140,62 @@ mask_variables:
   - mask_missing
   - mask_lake
 
-# Scaling
+# Preprocess
 
-scaling_variant: minmax
-scaling_use_cached: True
+preprocessor:
+    # static_inputs:
+    #     lazy: False
+    #     variant:
+    #       - _target_: hython.preprocessor.Log10p
+    #         variable:
+    #             - "KsatVer"
+    dynamic_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.preprocessor.Log10p
+            variable:
+                - "precip"
+
+# Scaling 
+
+scaling_use_cached: False
+scaling_static_range:
+    thetaS: [0.25, 0.95] 
+    thetaR: [0.01, 0.35] # it was 0.25 in table
+    KsatVer: [1, 10000]
+    c: [1, 20]
+    f: [0.00001, 0.1] # from training data (it is fitted)
+    M: [1, 3000]
+    RootingDepth: [100, 2000 ] #5000] # (mm)
+    Swood: [0.0, 0.5] # -
+    Sl: [0.02, 0.2] #(mm)
+    Kext: [0.48, 0.96] # 
+
+
+scaler:
+    static_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.BoundedScaler
+            variable:
+              thetaR: ${scaling_static_range.thetaR}
+              KsatVer: ${scaling_static_range.KsatVer}
+              c: ${scaling_static_range.c}
+    dynamic_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.MinMax01Scaler
+            variable:
+              - "pet"
+              - "precip"
+          - _target_: hython.scaler.StandardScaler
+            variable:
+              - "temp"
+    target_variables:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.MinMax01Scaler
+            variable: ${target_variables}
 
 # MLFLow
 tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
@@ -171,7 +223,8 @@ training:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      scaling_variant: ${scaling_variant}
+      preprocessor: ${preprocessor}
+      scaler: ${scaler}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -254,7 +307,8 @@ hpo:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      scaling_variant: ${scaling_variant}
+      preprocessor: ${preprocessor}
+      scaler: ${scaler}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
