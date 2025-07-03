@@ -184,3 +184,6 @@ core.jwb*
 *.err
 *.out
 *.log
+
+# user
+*iacopo*
