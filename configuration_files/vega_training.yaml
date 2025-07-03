@@ -14,13 +14,13 @@
 #! change run or exp name for each user on JSC (overwrite will fail due to permissions)
 # General configuration
 experiment_name: "vega-train-eurac"
-run_id: "vega-train-eurac-10"
+run_id: "vega-train-eurac-1"
 
 work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
-train_temporal_range: ["2017-01-01", "2019-12-31"]
+train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2022-01-01", "2022-12-31"]
+test_temporal_range: ["2019-01-01", "2020-12-31"]
 
 seed: 10 
 
@@ -48,7 +48,7 @@ hython_trainer: rnntrainer
 loss_fn:
   _target_: hython.losses.RMSELoss
 metric_fn:
-  _target_: hython.metrics.MeanSquaredError
+  _target_: hython.metrics.MSEMetric
 # TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
 metric_name: MSEMetric
 
@@ -66,10 +66,8 @@ learning_rate: 0.001
 
 batch: 512
 
-
 epochs: 10
 time_ray: False
-
 
 gradient_clip:
     max_norm: 1
@@ -86,20 +84,19 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.01
+  frac_space: 0.1
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.01
+  frac_space: 0.1
 
 test_downsampler: null
 
 
 #  dynamic 
 dynamic_downsampler:
-    frac_time: 0.1
-
+    frac_time: 0.2
 
 # === Data ===
 data_lazy_load: False
@@ -115,9 +112,9 @@ trials: 2
 
 data_source:
   file:
-    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_static.zarr
-    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/emo1_dynamic.zarr
-    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/emo1_dynamic.zarr
+    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_static.zarr
+    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_dynamic.zarr
+    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/eobs_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
@@ -126,15 +123,10 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
+  - thetaS
   - thetaR
   - KsatVer
   - c
-  # - f
-  # - M
-  # - RootingDepth
-  # - Swood
-  # - Sl
-  # - Kext
 
 dynamic_inputs:
   - precip
@@ -143,68 +135,15 @@ dynamic_inputs:
   
 target_variables:
   - vwc
-  #- actevap
 
 mask_variables:
   - mask_missing
   - mask_lake
 
-# Preprocess
+# Scaling
 
-preprocessor:
-    # static_inputs:
-    #     lazy: False
-    #     variant:
-    #       - _target_: hython.preprocessor.Log10p
-    #         variable:
-    #             - "KsatVer"
-    dynamic_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.preprocessor.Log10p
-            variable:
-                - "precip"
-
-# Scaling 
-
-scaling_use_cached: False
-scaling_static_range:
-    thetaS: [0.25, 0.95] 
-    thetaR: [0.01, 0.35] # it was 0.25 in table
-    KsatVer: [1, 10000]
-    c: [1, 20]
-    f: [0.00001, 0.1] # from training data (it is fitted)
-    M: [1, 3000]
-    RootingDepth: [100, 2000 ] #5000] # (mm)
-    Swood: [0.0, 0.5] # -
-    Sl: [0.02, 0.2] #(mm)
-    Kext: [0.48, 0.96] # 
-
-
-scaler:
-    static_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.BoundedScaler
-            variable:
-              thetaR: ${scaling_static_range.thetaR}
-              KsatVer: ${scaling_static_range.KsatVer}
-              c: ${scaling_static_range.c}
-    dynamic_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.MinMax01Scaler
-            variable:
-              - "pet"
-              - "precip"
-          - _target_: hython.scaler.StandardScaler
-            variable:
-              - "temp"
-    target_variables:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.MinMax01Scaler
-            variable: ${target_variables}
+scaling_variant: minmax
+scaling_use_cached: True
 
 # MLFLow
 tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
@@ -218,7 +157,7 @@ model_logger:
       log: True
       load: False
 
-training_pipeline:
+training:
   _target_: itwinai.pipeline.Pipeline
   steps:
     - _target_: itwinai.plugins.hython.data.RNNDatasetGetterAndPreprocessor
@@ -232,8 +171,7 @@ training_pipeline:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      preprocessor: ${preprocessor}
-      scaler: ${scaler}
+      scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -316,8 +254,7 @@ hpo:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      preprocessor: ${preprocessor}
-      scaler: ${scaler}
+      scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -399,14 +336,14 @@ hpo:
       ray_tune_config:
         _target_: ray.tune.TuneConfig
         num_samples: ${trials}
-        scheduler:
-          _target_: ray.tune.schedulers.ASHAScheduler
-          metric: loss
-          mode: min
-          max_t: 25
-          grace_period: 10
-          reduction_factor: 6
-          brackets: 1
+        scheduler: null
+        #   _target_: ray.tune.schedulers.ASHAScheduler
+        #   metric: loss
+        #   mode: min
+        #   max_t: 5
+        #   grace_period: 2
+        #   reduction_factor: 6
+        #   brackets: 1
       ray_run_config:
         _target_: ray.tune.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
@@ -429,13 +366,10 @@ hpo:
           upper: 512
         dropout:
           type: choice
-          categories: [0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 0.9]
+          categories: [0.1, 0.2, 0.3, 0.4, 0.5]
         seq_length:
           type: qrandint
-          lower: 30
-          upper: 360
-          q: 60
-        # interval_value:
-        #   type: choice
-        #   categories: [3, 5, 10]
+          lower: 90
+          upper: 365
+          q: 30
         
