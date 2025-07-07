@@ -1,10 +1,9 @@
 import logging
 import os
+from functools import partial
 from pathlib import Path
 from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
-
-from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -27,10 +26,10 @@ from itwinai.torch.distributed import (
     HorovodStrategy,
     NonDistributedStrategy,
 )
-from itwinai.utils import time_and_log
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
+from itwinai.utils import time_and_log
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
