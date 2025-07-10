@@ -17,8 +17,8 @@ authors = [
 dependencies = [
   "aiohttp>=3.11.13",
   "cf-xarray>=0.10.2",
-  "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@main",
-  "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@main",
+  "hython[complete] @ git+https://github.com/interTwin-eu/hython.git@15f04936f6001978b366f67fe29dff073c8766d8",
+  "itwinai[torch] @ git+https://github.com/interTwin-eu/itwinai@99f94e1e85aba47db58d8c1fcb34ab68a423d3a7",
   "pytest>=8.3.4",
   "requests>=2.32.3",
   "scikit-learn>=1.6.1",

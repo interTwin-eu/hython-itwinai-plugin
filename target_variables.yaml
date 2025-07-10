@@ -1,0 +1,32 @@
+center:
+  attrs: {}
+  coords:
+    layer:
+      attrs:
+        axis: Z
+        long_name: layer_index
+        standard_name: layer_index
+      data: 1.0
+      dims: !!python/tuple []
+  data_vars:
+    vwc:
+      attrs: {}
+      data: 0.07694672048091888
+      dims: !!python/tuple []
+  dims: {}
+scale:
+  attrs: {}
+  coords:
+    layer:
+      attrs:
+        axis: Z
+        long_name: layer_index
+        standard_name: layer_index
+      data: 1.0
+      dims: !!python/tuple []
+  data_vars:
+    vwc:
+      attrs: {}
+      data: 0.49128133058547974
+      dims: !!python/tuple []
+  dims: {}

@@ -1,0 +1,78 @@
+center:
+  attrs: {}
+  coords:
+    layer:
+      attrs: {}
+      data: 1
+      dims: !!python/tuple []
+    spatial_ref:
+      attrs:
+        GeoTransform: 5.697916666666668 0.008333333333333331 0.0 48.78875 0.0 -0.008333333333333337
+        crs_wkt: GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]
+        geographic_crs_name: WGS 84
+        grid_mapping_name: latitude_longitude
+        horizontal_datum_name: World Geodetic System 1984
+        inverse_flattening: 298.257223563
+        longitude_of_prime_meridian: 0.0
+        prime_meridian_name: Greenwich
+        reference_ellipsoid_name: WGS 84
+        semi_major_axis: 6378137.0
+        semi_minor_axis: 6356752.314245179
+        spatial_ref: GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]
+        x_dim: longitude
+        y_dim: latitude
+      data: 0
+      dims: !!python/tuple []
+  data_vars:
+    KsatVer:
+      attrs: {}
+      data: 4.296777248382568
+      dims: !!python/tuple []
+    c:
+      attrs: {}
+      data: 7.86669921875
+      dims: !!python/tuple []
+    thetaR:
+      attrs: {}
+      data: 0.07694672048091888
+      dims: !!python/tuple []
+  dims: {}
+scale:
+  attrs: {}
+  coords:
+    layer:
+      attrs: {}
+      data: 1
+      dims: !!python/tuple []
+    spatial_ref:
+      attrs:
+        GeoTransform: 5.697916666666668 0.008333333333333331 0.0 48.78875 0.0 -0.008333333333333337
+        crs_wkt: GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]
+        geographic_crs_name: WGS 84
+        grid_mapping_name: latitude_longitude
+        horizontal_datum_name: World Geodetic System 1984
+        inverse_flattening: 298.257223563
+        longitude_of_prime_meridian: 0.0
+        prime_meridian_name: Greenwich
+        reference_ellipsoid_name: WGS 84
+        semi_major_axis: 6378137.0
+        semi_minor_axis: 6356752.314245179
+        spatial_ref: GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AXIS["Latitude",NORTH],AXIS["Longitude",EAST],AUTHORITY["EPSG","4326"]]
+        x_dim: longitude
+        y_dim: latitude
+      data: 0
+      dims: !!python/tuple []
+  data_vars:
+    KsatVer:
+      attrs: {}
+      data: 7833.48388671875
+      dims: !!python/tuple []
+    c:
+      attrs: {}
+      data: 8.880155563354492
+      dims: !!python/tuple []
+    thetaR:
+      attrs: {}
+      data: 0.20530463755130768
+      dims: !!python/tuple []
+  dims: {}

@@ -102,7 +102,7 @@ dataset: WflowSBM_HPC
 num_workers_dataloader: 8
 
 # === Ray HPO ===
-num_workers_per_trial: 2
+num_workers_per_trial: 4
 cpu_per_worker: 12
 gpu_per_worker: 1 # 0. - 1
 trials: 2
@@ -223,10 +223,17 @@ training:
       epochs: ${epochs}
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
+      ray_scaling_config:
+        _target_: ray.train.ScalingConfig
+        num_workers: 4
+        use_gpu: true
+        resources_per_worker:
+          CPU: ${cpu_per_worker}
+          GPU: ${gpu_per_worker}
       logger:
         _target_: itwinai.loggers.LoggersCollection
         loggers:
@@ -307,7 +314,7 @@ hpo:
       epochs: ${epochs}
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 0
       profiling_warmup_epochs: 1

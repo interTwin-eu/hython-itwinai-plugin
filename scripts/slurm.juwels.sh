@@ -12,10 +12,10 @@
 #SBATCH --time=01:30:50
 
 # Resources allocation
-#SBATCH --partition=develbooster
+#SBATCH --partition=booster
 #SBATCH --nodes=2
 #SBATCH --gpus-per-node=2
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=25
 #SBATCH --exclusive
 #SBATCH --mem=256G
 
@@ -197,9 +197,9 @@ elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  separation
+  # separation
 
-  ray-launcher "$TRAINING_CMD"
+  # ray-launcher "$TRAINING_CMD"
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
   exit 1
