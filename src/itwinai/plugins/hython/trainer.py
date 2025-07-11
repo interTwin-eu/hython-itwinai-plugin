@@ -6,7 +6,6 @@ from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
 
 import numpy as np
-import pandas as pd
 import torch
 from hydra.utils import instantiate
 from torch import nn
@@ -649,7 +648,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 metric_history[f"train_{target}"].append(train_metric[target])
                 metric_history[f"val_{target}"].append(val_metric[target])
 
-
             # Aggregate and log metrics
             metric_history_ = {}
             for key, val in metric_history.items():
@@ -666,7 +664,7 @@ class RNNDistributedTrainer(TorchTrainer):
 
             avg_metrics = {}
             for metric_key, metric_values in metric_history_.items():
-                avg_metrics[metric_key] = (sum(metric_values) / len(metric_values))
+                avg_metrics[metric_key] = sum(metric_values) / len(metric_values)
 
             for m_name, m_val in avg_metrics.items():
                 self.log(

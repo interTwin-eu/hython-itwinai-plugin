@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Literal, Union
 
 from torch.nn.modules.loss import _Loss
 
-from hython.metrics import CustomMetric, TorchMetric
 from itwinai.torch.config import TrainingConfiguration
 
 
