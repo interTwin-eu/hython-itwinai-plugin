@@ -11,7 +11,7 @@
 # - Linus Maximilian Eickhoff <linus.maximilian.eickhoff@cern.ch> - CERN
 # --------------------------------------------------------------------------------------
 
-#! change run or exp name for each user on JSC (overwrite will fail due to permissions)
+#! change run or exp name for each user (overwrite will fail due to permissions)
 # General configuration
 experiment_name: "vega-train-eurac"
 run_id: "vega-train-eurac-1"
@@ -20,7 +20,7 @@ work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
 train_temporal_range: ["2019-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2019-01-01", "2020-12-31"]
+test_temporal_range: ["2022-01-01", "2022-12-31"]
 
 seed: 10 
 
@@ -47,10 +47,6 @@ hython_trainer: rnntrainer
 
 loss_fn:
   _target_: hython.losses.RMSELoss
-metric_fn:
-  _target_: hython.metrics.MeanSquaredError
-# TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
-metric_name: MSEMetric
 
 optimizer: adam
 
@@ -60,14 +56,14 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 180
+seq_length: 10
 
 learning_rate: 0.001
 
 batch: 512
 
-epochs: 10
-time_ray: False
+epochs: 2
+time_ray: True
 
 gradient_clip:
     max_norm: 1
@@ -84,19 +80,19 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 test_downsampler: null
 
 
 #  dynamic 
 dynamic_downsampler:
-    frac_time: 0.2
+    frac_time: 0.1
 
 # === Data ===
 data_lazy_load: False
@@ -105,7 +101,7 @@ num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 2
-cpu_per_worker: 12
+cpu_per_worker: 11
 gpu_per_worker: 1 # 0. - 1
 trials: 2
 
@@ -232,6 +228,7 @@ training:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+      experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -263,8 +260,6 @@ training:
         model_head_kwargs: ${model_head_kwargs}
 
         loss_fn: ${loss_fn}
-        metric_fn: ${metric_fn}
-        metric_name: ${metric_name}
 
         gradient_clip: ${gradient_clip}
 
@@ -276,9 +271,12 @@ training:
       run_id: $(run_id)
       strategy: ${strategy}
       epochs: ${epochs}
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -316,6 +314,7 @@ hpo:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+      experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -349,9 +348,6 @@ hpo:
         model_head_kwargs: ${model_head_kwargs}
 
         loss_fn: ${loss_fn}
-        metric_fn: ${metric_fn}
-        metric_name: ${metric_name}
-
         gradient_clip: ${gradient_clip}
 
         predict_steps: ${predict_steps}
@@ -363,9 +359,12 @@ hpo:
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1

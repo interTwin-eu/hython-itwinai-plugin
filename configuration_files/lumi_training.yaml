@@ -48,7 +48,7 @@ hython_trainer: rnntrainer
 loss_fn:
   _target_: hython.losses.RMSELoss
 metric_fn:
-  _target_: hython.metrics.MSEMetric
+  _target_: hython.metrics.MeanSquaredError
 # TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
 metric_name: MSEMetric
 
@@ -60,13 +60,13 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 180
+seq_length: 10
 
 learning_rate: 0.001
 
 batch: 512
 
-epochs: 10
+epochs: 2
 time_ray: True
 
 gradient_clip:
@@ -84,17 +84,17 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 test_downsampler: null
 
 dynamic_downsampler:
-    frac_time: 0.2
+    frac_time: 0.1
 
 # === Data ===
 data_lazy_load: False
@@ -103,7 +103,7 @@ num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 2
-cpu_per_worker: 12
+cpu_per_worker: 11
 gpu_per_worker: 1 # 0. - 1
 trials: 2
 
@@ -138,10 +138,61 @@ mask_variables:
   - mask_missing
   - mask_lake
 
-# Scaling
+# Preprocess
+preprocessor:
+    # static_inputs:
+    #     lazy: False
+    #     variant:
+    #       - _target_: hython.preprocessor.Log10p
+    #         variable:
+    #             - "KsatVer"
+    dynamic_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.preprocessor.Log10p
+            variable:
+                - "precip"
 
-scaling_variant: minmax
+# Scaling 
 scaling_use_cached: False
+scaling_static_range:
+    thetaS: [0.25, 0.95] 
+    thetaR: [0.01, 0.35] # it was 0.25 in table
+    KsatVer: [1, 10000]
+    c: [1, 20]
+    f: [0.00001, 0.1] # from training data (it is fitted)
+    M: [1, 3000]
+    RootingDepth: [100, 2000 ] #5000] # (mm)
+    Swood: [0.0, 0.5] # -
+    Sl: [0.02, 0.2] #(mm)
+    Kext: [0.48, 0.96] # 
+
+
+scaler:
+    static_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.BoundedScaler
+            variable:
+              thetaR: ${scaling_static_range.thetaR}
+              KsatVer: ${scaling_static_range.KsatVer}
+              c: ${scaling_static_range.c}
+    dynamic_inputs:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.MinMax01Scaler
+            variable:
+              - "pet"
+              - "precip"
+          - _target_: hython.scaler.StandardScaler
+            variable:
+              - "temp"
+    target_variables:
+        lazy: False
+        variant:
+          - _target_: hython.scaler.MinMax01Scaler
+            variable: ${target_variables}
+
 
 # MLFLow
 tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
@@ -169,7 +220,8 @@ training:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      scaling_variant: ${scaling_variant}
+      preprocessor: ${preprocessor}
+      scaler: ${scaler}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -177,6 +229,7 @@ training:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+      experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -221,9 +274,12 @@ training:
       run_id: ${run_id}
       strategy: ${strategy}
       epochs: ${epochs}
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -252,7 +308,8 @@ hpo:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      scaling_variant: ${scaling_variant}
+      preprocessor: ${preprocessor}
+      scaler: ${scaler}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -260,6 +317,7 @@ hpo:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
+      experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -307,9 +365,12 @@ hpo:
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
+      metrics:
+        mse:
+          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      torch_profiling: False
+      enable_torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -370,7 +431,4 @@ hpo:
           lower: 90
           upper: 365
           q: 30
-        interval_value:
-          type: choice
-          categories: [3, 5, 10]
         

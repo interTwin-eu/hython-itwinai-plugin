@@ -3,20 +3,19 @@
 # SLURM jobscript for JSC systems
 
 # Job configuration
-#SBATCH --job-name=distributed_training
+#SBATCH --job-name=hython-runall
 #SBATCH --account=intertwin
 #SBATCH --mail-user=
 #SBATCH --mail-type=ALL
 #SBATCH --output=job.out
 #SBATCH --error=job.err
-#SBATCH --time=01:30:50
+#SBATCH --time=00:15:00
 
 # Resources allocation
-#SBATCH --partition=develbooster
-#SBATCH --nodes=2
+#SBATCH --partition=booster
+#SBATCH --nodes=1
 #SBATCH --gpus-per-node=2
-#SBATCH --cpus-per-task=16
-#SBATCH --exclusive
+#SBATCH --cpus-per-task=48
 #SBATCH --mem=256G
 
 # Load environment modules
@@ -179,9 +178,9 @@ export ITWINAI_LOG_LEVEL="DEBUG"
 # Launch training
 if [ "$DIST_MODE" == "ddp" ] ; then
   echo "DDP training: $TRAINING_CMD"
-  torchrun-launcher "$TRAINING_CMD"
+  # torchrun-launcher "$TRAINING_CMD"
 
-  separation
+  # separation
 
   ray-launcher "$TRAINING_CMD"
   
