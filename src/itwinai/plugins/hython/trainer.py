@@ -1,5 +1,6 @@
 import logging
 import os
+from functools import partial
 from pathlib import Path
 from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
@@ -28,6 +29,7 @@ from itwinai.torch.distributed import (
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
+from itwinai.utils import time_and_log
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
@@ -61,6 +63,7 @@ class RNNDistributedTrainer(TorchTrainer):
             ``checkpoint_every`` epochs. Disabled if None. Defaults to None.
         name (str | None, optional): trainer custom name. Defaults to None.
     """
+
     config: HythonConfiguration
     lr_scheduler: LRScheduler
     model: str
@@ -88,8 +91,9 @@ class RNNDistributedTrainer(TorchTrainer):
         config: HythonConfiguration = HythonConfiguration(**config)
         metrics = {}
         # setup hython mtrics
-        metrics[f"{config.metric_name}"] = instantiate(
-            {"metric_fn": config.metric_fn})["metric_fn"]
+        metrics[f"{config.metric_name}"] = instantiate({"metric_fn": config.metric_fn})[
+            "metric_fn"
+        ]
 
         super().__init__(
             config=config,
@@ -430,7 +434,6 @@ class RNNDistributedTrainer(TorchTrainer):
         # pred and target can be (N, C) or (N, T, C) depending on how the model is trained.
         loss = torch.tensor(0.0, device=self.strategy.device())
         for i, target_name in enumerate(target_weight):
-
             iypred = {}
 
             if valid_mask is not None:
@@ -477,7 +480,8 @@ class RNNDistributedTrainer(TorchTrainer):
 
         if self.config.gradient_clip is not None:
             torch.nn.utils.clip_grad_norm_(
-                self.model.parameters(), **self.config.gradient_clip  # type: ignore
+                self.model.parameters(),
+                **self.config.gradient_clip,  # type: ignore
             )
 
         opt.step()
@@ -577,7 +581,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 raise ValueError(
                     f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
                     "Make sure SLURM_NNODES is set properly."
-                    )
+                )
 
             epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
@@ -615,9 +619,10 @@ class RNNDistributedTrainer(TorchTrainer):
             # best_ckpt_path = None
 
             # gather losses from each worker and place them on the main worker.
-            worker_val_losses = self._time_and_log(
-                lambda: self.strategy.gather(val_loss, dst_rank=0),
-                "gather_loss_time_s_per_epoch",
+            worker_val_losses = time_and_log(
+                func=partial(self.strategy.gather, tensor=val_loss, dst_rank=0),
+                logger=self.logger,
+                identifier="gather_loss_time_s_per_epoch",
                 step=self.current_epoch,
             )
             if self.strategy.is_main_worker:
@@ -646,11 +651,13 @@ class RNNDistributedTrainer(TorchTrainer):
 
             if self.time_ray:
                 # time and log the ray_report call
-                self._time_and_log(
-                    lambda: self.ray_report(
+                time_and_log(
+                    func=partial(
+                        self.ray_report,
                         metrics={"loss": val_loss.item(), "train_loss": train_loss.item()},
                     ),
-                    "ray_report_time_s_per_epoch",
+                    logger=self.logger,
+                    identifier="ray_report_time_s_per_epoch",
                     step=self.current_epoch,
                 )
             else:
@@ -665,9 +672,7 @@ class RNNDistributedTrainer(TorchTrainer):
             if self.strategy.is_main_worker and self.strategy.is_distributed:
                 assert epoch_time_tracker is not None
                 epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(
-                        self.current_epoch + 1, epoch_time
-                )  # type: ignore
+                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
@@ -697,7 +702,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 kind="metric",
                 step=self.current_epoch,
             )
-
 
     def create_dataloaders(
         self,
@@ -755,7 +759,7 @@ class RNNDistributedTrainer(TorchTrainer):
         # (can happen for strong downsampling)
         # check if train_dataset has different time ranges for different batches
 
-        self.train_time_range = train_dataset[0]['xd'].shape[0]
+        self.train_time_range = train_dataset[0]["xd"].shape[0]
 
         # Get sequence length from configuration
         if validation_dataset is not None:
@@ -769,4 +773,4 @@ class RNNDistributedTrainer(TorchTrainer):
                 drop_last=True,
             )  # ! drop_last=True, throws errors for samples < batch size
             # (can happen for strong downsampling)
-            self.val_time_range = validation_dataset[0]['xd'].shape[0]
+            self.val_time_range = validation_dataset[0]["xd"].shape[0]
