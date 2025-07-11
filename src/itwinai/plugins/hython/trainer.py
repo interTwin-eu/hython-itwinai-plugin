@@ -12,8 +12,8 @@ from torch import nn
 from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
-from torchmetrics import Metric
 from torch.utils.data import DataLoader, Dataset
+from torchmetrics import Metric
 from tqdm.auto import tqdm
 
 from hython.models import get_model_class as get_hython_model
