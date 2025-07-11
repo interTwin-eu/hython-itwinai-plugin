@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Literal, Union
 
 from torch.nn.modules.loss import _Loss
 
-from hython.metrics import Metric
 from itwinai.torch.config import TrainingConfiguration
 
 
@@ -22,7 +21,6 @@ class HythonConfiguration(TrainingConfiguration):
     target_weights: Union[str, Dict[str, float]] | None = None
     gradient_clip: Dict[str, Any] | None = None
     model_head_layer: str | None = None
-    metric_fn: Metric | None = None
     seed: int | None = None
     model_path: str | None = None
     model_head_activation: str
@@ -31,7 +29,6 @@ class HythonConfiguration(TrainingConfiguration):
     static_inputs: List[str]
     hython_trainer: str
     loss_fn: _Loss
-    metric_name: str
     lr_scheduler_hython: Dict[str, Any] | None = None
     lr_scheduler: Literal[
         "step", "multistep", "constant", "linear", "exponential", "polynomial"

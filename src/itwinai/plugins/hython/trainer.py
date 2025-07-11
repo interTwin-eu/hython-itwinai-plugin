@@ -6,7 +6,6 @@ from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
 
 import numpy as np
-import pandas as pd
 import torch
 from hydra.utils import instantiate
 from torch import nn
@@ -14,6 +13,7 @@ from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import LRScheduler
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader, Dataset
+from torchmetrics import Metric
 from tqdm.auto import tqdm
 
 from hython.models import get_model_class as get_hython_model
@@ -84,16 +84,12 @@ class RNNDistributedTrainer(TorchTrainer):
         checkpoint_every: int | None = None,
         name: str | None = None,
         random_seed: int | None = None,
+        metrics: Dict[str, Metric] | None = None,
         **kwargs,
     ) -> None:
         # Save for serialization
         self.save_parameters(**self.locals2params(locals()))
         config: HythonConfiguration = HythonConfiguration(**config)
-        metrics = {}
-        # setup hython mtrics
-        metrics[f"{config.metric_name}"] = instantiate({"metric_fn": config.metric_fn})[
-            "metric_fn"
-        ]
 
         super().__init__(
             config=config,
@@ -115,7 +111,6 @@ class RNNDistributedTrainer(TorchTrainer):
 
         self.epoch_preds = None
         self.epoch_targets = None
-        self.epoch_valid_masks = None
 
     @suppress_workers_print
     @monitor_exec
@@ -190,12 +185,6 @@ class RNNDistributedTrainer(TorchTrainer):
 
         # print(f"PARAMS:{sum(p.numel() for p in self.model.parameters() if p.requires_grad)}")
         return super().execute(train_dataset, validation_dataset, test_dataset)
-
-    def _setup_metrics(self) -> None:
-        # TODO: Hython: Please make Metrics based on torchmetrics so they can be computed on
-        # TODO: GPU
-        # TODO: remove this override method when done
-        pass
 
     def _set_lr_scheduler_from_config(self) -> None:
         """Parse Lr scheduler from training config"""
@@ -361,14 +350,12 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         prediction: Dict[str, torch.Tensor],
         target: torch.Tensor,
-        mask: torch.Tensor | None = None,
     ) -> None:
         """Concatenate results for reporting and computing the metrics
 
         Args:
             prediction (Dict[str, torch.Tensor]): prediction
             target (torch.Tensor): target
-            mask (torch.Tensor | None, optional): mask. Defaults to None.
         """
 
         # prediction can be probabilistic
@@ -380,10 +367,6 @@ class RNNDistributedTrainer(TorchTrainer):
             raise ValueError(f"Unknown model head layer: {self.config.model_head_layer}")
 
         target_cpu = target.detach().cpu().numpy()
-        if mask is not None:
-            mask_cpu = mask.detach().cpu().numpy()
-        else:
-            mask_cpu = mask
 
         if self.epoch_preds is None:
             # Pre-allocate memory for results
@@ -397,26 +380,17 @@ class RNNDistributedTrainer(TorchTrainer):
             expected_samples = len(self.train_dataloader) * batch_size
             self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
             self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
-            self.epoch_valid_masks = mask_cpu
         else:
             arrays = [self.epoch_preds, pred_cpu]
-            self.epoch_preds = np.concatenate(arrays, axis=0)
+            self.epoch_preds = torch.from_numpy(np.concatenate(arrays, axis=0))
 
             arrays = [self.epoch_targets, target_cpu]
-            self.epoch_targets = np.concatenate(arrays, axis=0)
-
-            if mask is not None:
-                if self.epoch_valid_masks is None:
-                    self.epoch_valid_masks = mask_cpu
-                else:
-                    arrays = [self.epoch_valid_masks, mask_cpu]
-                    self.epoch_valid_masks = np.concatenate(arrays, axis=0)
+            self.epoch_targets = torch.from_numpy(np.concatenate(arrays, axis=0))
 
     def _compute_batch_loss(
         self,
         prediction: Dict[str, torch.Tensor],
         target: torch.Tensor,
-        valid_mask: torch.Tensor | None = None,
         target_weight: Dict[str, float] = {},
     ) -> torch.Tensor:
         """Compute the loss for the batch.
@@ -436,33 +410,19 @@ class RNNDistributedTrainer(TorchTrainer):
         for i, target_name in enumerate(target_weight):
             iypred = {}
 
-            if valid_mask is not None:
-                imask = valid_mask[..., i]
-            else:
-                imask = Ellipsis
+            imask = Ellipsis
 
             # target
             iytrue = target[..., i][imask]
 
             if self.config.model_head_layer == "regression":
                 iypred["y_pred"] = prediction["y_hat"][..., i][imask]
-                n = torch.ones_like(iypred["y_pred"])
             elif self.config.model_head_layer == "distr_normal":
                 iypred["mu"] = prediction["mu"][..., i][imask]
                 iypred["sigma"] = prediction["sigma"][..., i][imask]
-                n = torch.ones_like(iypred["mu"])
 
             w: float = target_weight[target_name]
             loss_tmp: torch.Tensor = self.loss(iytrue, **iypred)
-
-            # in case there are missing observations in the batch
-            # the loss should be weighted to reduce the importance
-            # of the loss on the update of the NN weights
-            if valid_mask is not None:
-                # fraction valid samples per batch
-                scaling_factor = torch.sum(imask) / torch.sum(n)  # type: ignore
-                # scale by number of valid samples in a mini-batch
-                loss_tmp = loss_tmp * scaling_factor
 
             loss += loss_tmp * w
 
@@ -486,33 +446,38 @@ class RNNDistributedTrainer(TorchTrainer):
 
         opt.step()
 
-    def compute_metrics(self) -> Dict[str, Any]:
-        """Compute the metric by the object's metric function.
+    def compute_metrics(
+        self,
+        true: torch.Tensor,
+        pred: torch.Tensor,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Compute and log metrics.
+
+        Args:
+            true (torch.Tensor): true values.
+            pred (torch.Tensor): predicted values.
 
         Returns:
-            Dict[str, Any]: metric in format {'target_name': {'metric_name': value}}
+          Dict[str, Dict[str, Any]]: metric values.
         """
         new_metrics = {}
         for name, metric in self.metrics.items():
-            computed_metrics = metric(
-                self.epoch_targets,  # type: ignore
-                self.epoch_preds,
-                self.config.target_variables,
-                self.epoch_valid_masks,
-            )
-            # computed_metrics will have format {'target_name': value}
-            for target_name, metric_value in computed_metrics.items():
+            for idx, target in enumerate(self.config.target_variables):
+                computed_metrics = metric(
+                    pred[:, idx],
+                    true[:, idx],
+                )
+                # computed_metrics will have format {'target_name': value}
                 # Initialize nested dict if target_name not present
-                if target_name not in new_metrics:
-                    new_metrics[target_name] = {}
+                if target not in new_metrics:
+                    new_metrics[target] = {}
                 # Add the metric value with the metric name as key
-                new_metrics[target_name][name] = metric_value
+                new_metrics[target][name] = computed_metrics
 
         py_logger.debug(f"Metrics: {new_metrics}")
         # reset
         self.epoch_preds = None
         self.epoch_targets = None
-        self.epoch_valid_masks = None
 
         return new_metrics
 
@@ -553,7 +518,6 @@ class RNNDistributedTrainer(TorchTrainer):
             batch_loss = self._compute_batch_loss(
                 prediction=output,
                 target=target,
-                valid_mask=None,
                 target_weight=self.target_weights,
             )
 
@@ -564,9 +528,15 @@ class RNNDistributedTrainer(TorchTrainer):
             running_batch_loss += batch_loss.detach()
 
         epoch_loss = running_batch_loss / len(dataloader)
-        metric = self.compute_metrics()
+        if self.epoch_preds is None or self.epoch_targets is None:
+            raise ValueError("epoch_preds or epoch_targets is None")
 
-        return epoch_loss, metric
+        metrics = self.compute_metrics(
+            true=self.epoch_targets,
+            pred=self.epoch_preds,
+        )
+
+        return epoch_loss, metrics
 
     @profile_torch_trainer
     @measure_gpu_utilization
@@ -680,14 +650,22 @@ class RNNDistributedTrainer(TorchTrainer):
 
             # Aggregate and log metrics
             metric_history_ = {}
-            for period in metric_history:
-                for target in metric_history[period]:
-                    for imetric, metric_value in target.items():
-                        metric_key = imetric.lower().split("metric")[0]
-                        new_metric_key = period + "_" + metric_key
-                        metric_history_[new_metric_key] = [metric_value]
+            for key, val in metric_history.items():
+                if not val:
+                    raise ValueError(f"no history for {key}")
+                metric_names = val[0].keys()
+                for metric_name in metric_names:
+                    new_metric_key = key + "_" + metric_name
+                    metric_history_[new_metric_key] = []
+                for metrics in val:
+                    for metric_name, metric_val in metrics.items():
+                        metric_key = key + "_" + metric_name
+                        metric_history_[metric_key].append(metric_val.item())
 
-            avg_metrics = pd.DataFrame(metric_history_).mean().to_dict()
+            avg_metrics = {}
+            for metric_key, metric_values in metric_history_.items():
+                avg_metrics[metric_key] = sum(metric_values) / len(metric_values)
+
             for m_name, m_val in avg_metrics.items():
                 self.log(
                     item=m_val,
