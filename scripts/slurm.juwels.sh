@@ -127,6 +127,7 @@ function ray-launcher(){
       sleep 5 # Wait before starting the next worker to prevent race conditions.
   done
   echo All Ray workers started.
+  ray status
 
   # Run command without srun
   # if you want the number of workers to be adaptive during distributed training append this:

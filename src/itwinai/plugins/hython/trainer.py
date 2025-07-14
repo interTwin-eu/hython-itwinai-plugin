@@ -573,16 +573,17 @@ class RNNDistributedTrainer(TorchTrainer):
     def train(self) -> None:
         # Tracking epoch times for scaling test
         epoch_time_tracker: EpochTimeTracker | None = None
-        if self.strategy.is_main_worker:
-            # get number of nodes, defaults to unknown (unk)
-            try:
-                num_nodes = int(os.environ.get("SLURM_NNODES", 1))  # type: ignore
-            except Exception:
-                raise ValueError(
-                    f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
-                    "Make sure SLURM_NNODES is set properly."
+        if self.strategy.is_main_worker and self.strategy.is_distributed:
+            if "SLURM_NNODES" not in os.environ:
+                raise OSError(
+                    "'SLURM_NNODES' is not present in 'os.environ', but is required when "
+                    "running distributed training!"
                 )
-
+            num_nodes = int(os.environ["SLURM_NNODES"])
+            py_logger.warning(
+                f"Running distributed training with {num_nodes} nodes. "
+                "Epoch times will be tracked for scalability metrics."
+            )
             epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name

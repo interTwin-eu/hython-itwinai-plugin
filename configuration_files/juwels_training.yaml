@@ -60,13 +60,13 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 180
+seq_length: 30
 
 learning_rate: 0.001
 
-batch: 512
+batch: 128
 
-epochs: 5
+epochs: 2
 time_ray: True
 
 gradient_clip:
@@ -84,17 +84,17 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 test_downsampler: null
 
 dynamic_downsampler:
-    frac_time: 0.2
+    frac_time: 0.1
 
 # === Data ===
 data_lazy_load: False
@@ -103,9 +103,9 @@ num_workers_dataloader: 8
 
 # === Ray HPO ===
 num_workers_per_trial: 4
-cpu_per_worker: 12
+cpu_per_worker: 11
 gpu_per_worker: 1 # 0. - 1
-trials: 2
+trials: 1
 
 
 data_source:
@@ -227,13 +227,6 @@ training:
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
-      ray_scaling_config:
-        _target_: ray.train.ScalingConfig
-        num_workers: 4
-        use_gpu: true
-        resources_per_worker:
-          CPU: ${cpu_per_worker}
-          GPU: ${gpu_per_worker}
       logger:
         _target_: itwinai.loggers.LoggersCollection
         loggers:
