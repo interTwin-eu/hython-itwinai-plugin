@@ -19,7 +19,7 @@
 #SBATCH --mem=256G
 
 # Load environment modules
-ml Stages/2024 GCC OpenMPI CUDA/12 MPI-settings/CUDA Python HDF5 PnetCDF libaio mpi4py
+ml Stages/2025 GCC OpenMPI CUDA/12 cuDNN MPI-settings/CUDA Python CMake HDF5 PnetCDF libaio mpi4py git
 
 # Job info
 echo "DEBUG: TIME: $(date)"
@@ -133,16 +133,40 @@ function ray-launcher(){
   $1 +pipe_key=hpo
 }
 
+# function torchrun-launcher(){
+#   srun --cpu-bind=none --ntasks-per-node=1 \
+#     bash -c "torchrun \
+#     --log_dir='logs_torchrun' \
+#     --nnodes=$SLURM_NNODES \
+#     --nproc_per_node=$SLURM_GPUS_PER_NODE \
+#     --rdzv_id=$SLURM_JOB_ID \
+#     --rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
+#     --rdzv_backend=c10d \
+#     --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
+#     --no-python \
+#     $1 +pipe_key=training"
+# }
+
 function torchrun-launcher(){
+  export MASTER_ADDR="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)"
+  if [ "$SYSTEMNAME" = juwelsbooster ] \
+        || [ "$SYSTEMNAME" = juwels ] \
+        || [ "$SYSTEMNAME" = jurecadc ] \
+        || [ "$SYSTEMNAME" = jusuf ]; then
+      # Allow communication over InfiniBand cells on JSC machines.
+      export MASTER_ADDR="${MASTER_ADDR}i"
+  fi
+  export MASTER_PORT=54123
+
   srun --cpu-bind=none --ntasks-per-node=1 \
-    bash -c "torchrun \
+    bash -c "torchrun_jsc \
     --log_dir='logs_torchrun' \
     --nnodes=$SLURM_NNODES \
     --nproc_per_node=$SLURM_GPUS_PER_NODE \
     --rdzv_id=$SLURM_JOB_ID \
     --rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
     --rdzv_backend=c10d \
-    --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
+    --rdzv_endpoint=$MASTER_ADDR:$MASTER_PORT \
     --no-python \
     $1 +pipe_key=training"
 }
@@ -178,9 +202,9 @@ export ITWINAI_LOG_LEVEL="DEBUG"
 # Launch training
 if [ "$DIST_MODE" == "ddp" ] ; then
   echo "DDP training: $TRAINING_CMD"
-  # torchrun-launcher "$TRAINING_CMD"
+  torchrun-launcher "$TRAINING_CMD"
 
-  # separation
+  separation
 
   ray-launcher "$TRAINING_CMD"
   
@@ -196,9 +220,9 @@ elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  separation
+  # separation
 
-  ray-launcher "$TRAINING_CMD"
+  # ray-launcher "$TRAINING_CMD"
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
   exit 1
