@@ -722,10 +722,9 @@ class RNNDistributedTrainer(TorchTrainer):
         train_sampler = train_sampler_builder.get_sampler()
         val_sampler = val_sampler_builder.get_sampler()
 
-        batch_size = self.config.batch_size // self.strategy.global_world_size()
         self.train_dataloader = self.strategy.create_dataloader(
             dataset=train_dataset,
-            batch_size=batch_size,
+            batch_size=self.config.batch_size,
             num_workers=self.config.num_workers_dataloader,
             pin_memory=True,
             prefetch_factor=4,
@@ -743,7 +742,7 @@ class RNNDistributedTrainer(TorchTrainer):
         if validation_dataset is not None:
             self.validation_dataloader = self.strategy.create_dataloader(
                 dataset=validation_dataset,
-                batch_size=batch_size,
+                batch_size=self.config.batch_size,
                 num_workers=self.config.num_workers_dataloader,
                 pin_memory=self.config.pin_gpu_memory,
                 generator=self.torch_rng,
