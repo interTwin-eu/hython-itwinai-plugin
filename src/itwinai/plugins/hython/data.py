@@ -53,24 +53,16 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         scaler = Scaler(cfg, cfg.scaling_use_cached) # type: ignore
 
         train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train") # type: ignore
-        # check pickled dataset size
-        py_logger.info(
-            "pickled train_dataset_size: "
-            f"{len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB"
-            )
+
+        # check pickled dataset size if in debug mode
+        if py_logger.isEnabledFor(logging.DEBUG):
+            py_logger.debug(
+                "pickled train_dataset_size: "
+                f"{len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB"
+                )
 
         val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid") # type: ignore
         return train_dataset, val_dataset, None
-
-
-def ray_cluster_is_running() -> bool:
-    """Detect if code is running inside a Ray cluster."""
-    try:
-        from ray import train
-        train.get_context()
-        return True
-    except (ImportError, RuntimeError):
-        return False
 
 
 def prepare_batch_for_device(
