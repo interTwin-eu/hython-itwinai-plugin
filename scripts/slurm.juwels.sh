@@ -19,7 +19,7 @@
 #SBATCH --mem=256G
 
 # Load environment modules
-ml Stages/2024 GCC OpenMPI CUDA/12 MPI-settings/CUDA Python HDF5 PnetCDF libaio mpi4py
+ml Stages/2025 GCC OpenMPI CUDA/12 cuDNN MPI-settings/CUDA Python CMake HDF5 PnetCDF libaio mpi4py git
 
 # Job info
 echo "DEBUG: TIME: $(date)"

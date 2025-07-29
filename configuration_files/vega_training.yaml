@@ -14,7 +14,7 @@
 #! change run or exp name for each user (overwrite will fail due to permissions)
 # General configuration
 experiment_name: "vega-train-eurac"
-run_id: "vega-train-eurac-1"
+run_name: "vega-train-eurac-1"
 
 work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
@@ -201,7 +201,7 @@ model_logger:
       logger: local
       model_component: model # the main model
       model_name: ${model}
-      model_uri: ${work_dir}/${experiment_name}_${run_id}/${model}.pt
+      model_uri: ${work_dir}/${experiment_name}_${run_name}/${model}.pt
       log: True
       load: False
 
@@ -228,10 +228,9 @@ training:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
-      experiment_name: ${experiment_name}
       model: ${model}
       config:
-        experiment: ${experiment_name}/${run_id}
+        experiment: ${experiment_name}/${run_name}
         experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
@@ -268,7 +267,7 @@ training:
         # model logger
         model_logger: ${model_logger}
         
-      run_id: $(run_id)
+      run_name: $(run_name)
       strategy: ${strategy}
       epochs: ${epochs}
       metrics:
@@ -287,7 +286,7 @@ training:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            run_name: ${run_id}
+            run_name: ${run_name}
             log_freq: batch
             tracking_uri: ${tracking_uri}
 
@@ -314,10 +313,9 @@ hpo:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
-      experiment_name: ${experiment_name}
       model: ${model}
       config:
-        experiment: ${experiment_name}/${run_id}
+        experiment: ${experiment_name}/${run_name}
         experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
@@ -355,7 +353,7 @@ hpo:
         # model logger
         model_logger: ${model_logger}
         
-      run_id: $(run_id)
+      run_name: $(run_name)
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
@@ -375,7 +373,7 @@ hpo:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            run_name: ${run_id}
+            run_name: ${run_name}
             log_freq: batch
             tracking_uri: ${tracking_uri}
                     

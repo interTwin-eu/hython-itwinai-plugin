@@ -532,7 +532,7 @@ class RNNDistributedTrainer(TorchTrainer):
                     "Make sure SLURM_NNODES is set properly."
                 )
 
-            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
+            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_name}/epoch-time")
             epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
