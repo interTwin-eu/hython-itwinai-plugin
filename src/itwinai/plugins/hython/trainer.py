@@ -29,7 +29,7 @@ from itwinai.torch.distributed import (
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
-from itwinai.utils import time_and_log
+from itwinai.utils import time_and_log, EPOCH_TIME_DIR
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
@@ -542,27 +542,29 @@ class RNNDistributedTrainer(TorchTrainer):
     @measure_gpu_utilization
     def train(self) -> None:
         # Tracking epoch times for scaling test
-        epoch_time_tracker: EpochTimeTracker | None = None
-        if self.strategy.is_main_worker:
+        # epoch_time_tracker: EpochTimeTracker | None = None
+        # if self.strategy.is_main_worker:
             # get number of nodes, defaults to unknown (unk)
-            try:
-                num_nodes = int(os.environ.get("SLURM_NNODES", 1))  # type: ignore
-            except Exception:
-                raise ValueError(
-                    f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
-                    "Make sure SLURM_NNODES is set properly."
-                )
+            # try:
+                # num_nodes = int(os.environ.get("SLURM_NNODES", 1))  # type: ignore
+            # except Exception:
+                # raise ValueError(
+                    # f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
+                    # "Make sure SLURM_NNODES is set properly."
+                # )
 
-            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
-            epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
-            epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
+        epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/{EPOCH_TIME_DIR}")
+        epoch_time_file_name = f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
+        epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
-            epoch_time_tracker = EpochTimeTracker(
-                strategy_name=self.strategy.name,
-                save_path=epoch_time_output_path,
-                num_nodes=num_nodes,
-                should_log=self.measure_epoch_time,
-            )
+        epoch_time_logger = EpochTimeTracker(
+            strategy_name=self.strategy.name,
+            save_path=epoch_time_output_path,
+            num_workers=self.strategy.global_world_size(),
+            should_log=self.measure_epoch_time
+            and self.strategy.is_main_worker
+            and self.strategy.is_distributed,
+        )
 
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         # add empty validation metrics
@@ -639,10 +641,10 @@ class RNNDistributedTrainer(TorchTrainer):
                 self.test_epoch()
 
             # only main worker and for distributed
-            if self.strategy.is_main_worker and self.strategy.is_distributed:
-                assert epoch_time_tracker is not None
-                epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
+            # if self.strategy.is_main_worker and self.strategy.is_distributed:
+            #     assert epoch_time_tracker is not None
+            epoch_time = default_timer() - epoch_start_time
+            epoch_time_logger.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])

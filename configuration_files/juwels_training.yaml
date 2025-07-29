@@ -225,7 +225,7 @@ training:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
-      experiment_name: ${experiment_name}
+      # experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -271,7 +271,7 @@ training:
           _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      enable_torch_profiling: False
+      enable_torch_profiling: True
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -309,7 +309,7 @@ hpo:
       valid_downsampler: ${valid_downsampler}
       seq_length: ${seq_length}
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
-      experiment_name: ${experiment_name}
+      # experiment_name: ${experiment_name}
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_id}
@@ -357,7 +357,7 @@ hpo:
           _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      enable_torch_profiling: False
+      enable_torch_profiling: True
       random_seed: ${seed}
       profiling_wait_epochs: 0
       profiling_warmup_epochs: 1
