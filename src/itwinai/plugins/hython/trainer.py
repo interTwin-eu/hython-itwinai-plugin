@@ -565,13 +565,7 @@ class RNNDistributedTrainer(TorchTrainer):
             # best_ckpt_path = None
 
             # gather losses from each worker and place them on the main worker.
-            if self.logger:
-                worker_val_losses = time_and_log(
-                    func=partial(self.strategy.gather, tensor=val_loss, dst_rank=0),
-                    logger=self.logger,
-                    identifier="gather_loss_time_s_per_epoch",
-                    step=self.current_epoch,
-                )
+            worker_val_losses = self.strategy.gather(tensor=val_loss, dst_rank=0)
             if self.strategy.is_main_worker:
                 avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
                 if avg_val_loss < best_loss:
