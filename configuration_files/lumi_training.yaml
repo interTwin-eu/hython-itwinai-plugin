@@ -290,6 +290,7 @@ training:
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
             run_name: ${run_name}
+            log_on_workers: -1
             log_freq: batch
             tracking_uri: ${tracking_uri}
 
@@ -380,6 +381,7 @@ hpo:
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
             run_name: ${run_name}
+            log_on_workers: -1
             log_freq: batch
             tracking_uri: ${tracking_uri}
                     

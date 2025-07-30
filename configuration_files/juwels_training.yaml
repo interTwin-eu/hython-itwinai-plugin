@@ -281,6 +281,7 @@ training:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
+            log_on_workers: -1
             run_name: ${run_name}
             log_freq: batch
             tracking_uri: ${tracking_uri}
@@ -368,6 +369,7 @@ hpo:
             experiment_name: ${experiment_name}
             run_name: ${run_name}
             log_freq: batch
+            log_on_workers: -1
             tracking_uri: ${tracking_uri}
                     
       ray_scaling_config:
