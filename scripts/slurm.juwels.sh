@@ -133,18 +133,40 @@ function ray-launcher(){
   $1 +pipe_key=hpo
 }
 
+# function torchrun-launcher(){
+#   srun --cpu-bind=none --ntasks-per-node=1 \
+#     bash -c "torchrun \
+#     --log_dir='logs_torchrun' \
+#     --nnodes=$SLURM_NNODES \
+#     --nproc_per_node=$SLURM_GPUS_PER_NODE \
+#     --rdzv_id=$SLURM_JOB_ID \
+#     --rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
+#     --rdzv_backend=c10d \
+#     --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
+#     --no-python \
+#     $1 +pipe_key=training"
+# }
+
 function torchrun-launcher(){
+  export MASTER_ADDR="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)i"
+  export MASTER_PORT=54123
+
+  echo "torchrun's MASTER_ADDR: $MASTER_ADDR"
+
   srun --cpu-bind=none --ntasks-per-node=1 \
-    bash -c "torchrun \
-    --log_dir='logs_torchrun' \
-    --nnodes=$SLURM_NNODES \
-    --nproc_per_node=$SLURM_GPUS_PER_NODE \
-    --rdzv_id=$SLURM_JOB_ID \
-    --rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
-    --rdzv_backend=c10d \
-    --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
-    --no-python \
-    $1 +pipe_key=training"
+    bash -c '
+    echo "torchrun MASTER_ADDR: $MASTER_ADDR - $(hostname -s)i - is_host=$(( SLURM_NODEID == 0 ? 1 : 0 ))"; torchrun_jsc \
+        --log_dir="logs_torchrun" \
+        --nnodes="$SLURM_NNODES" \
+        --nproc_per_node="$SLURM_GPUS_PER_NODE" \
+        --rdzv_id="$SLURM_JOB_ID" \
+        --rdzv_conf=is_host=$(( SLURM_NODEID == 0 ? 1 : 0 )) \
+        --rdzv_backend=c10d \
+        --local_addr="$(hostname -s)i" \
+        --rdzv_endpoint="$MASTER_ADDR:$MASTER_PORT" \
+        --no-python \
+        $@ +pipe_key=training
+    ' bash "$1"
 }
 
 function srun-launcher(){
@@ -178,9 +200,9 @@ export ITWINAI_LOG_LEVEL="DEBUG"
 # Launch training
 if [ "$DIST_MODE" == "ddp" ] ; then
   echo "DDP training: $TRAINING_CMD"
-  # torchrun-launcher "$TRAINING_CMD"
+  torchrun-launcher "$TRAINING_CMD"
 
-  # separation
+  separation
 
   ray-launcher "$TRAINING_CMD"
   
@@ -196,9 +218,9 @@ elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  separation
+  # separation
 
-  ray-launcher "$TRAINING_CMD"
+  # ray-launcher "$TRAINING_CMD"
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
   exit 1

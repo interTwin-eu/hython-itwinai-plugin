@@ -1,0 +1,54 @@
+center:
+  attrs: {}
+  coords:
+    layer:
+      attrs:
+        axis: Z
+        long_name: layer_index
+        standard_name: layer_index
+      data: 1.0
+      dims: !!python/tuple []
+  data_vars:
+    pet:
+      attrs:
+        variant: MinMax01Scaler
+      data: 0.0
+      dims: !!python/tuple []
+    precip:
+      attrs:
+        variant: MinMax01Scaler
+      data: 0.0
+      dims: !!python/tuple []
+    temp:
+      attrs:
+        variant: StandardScaler
+      data: 11.352810859680176
+      dims: !!python/tuple []
+  dims: {}
+scale:
+  attrs: {}
+  coords:
+    layer:
+      attrs:
+        axis: Z
+        long_name: layer_index
+        standard_name: layer_index
+      data: 1.0
+      dims: !!python/tuple []
+  data_vars:
+    pet:
+      attrs:
+        variant: MinMax01Scaler
+      data: 12.279999732971191
+      dims: !!python/tuple []
+    precip:
+      attrs:
+        variant: MinMax01Scaler
+      data: 253.8000030517578
+      dims: !!python/tuple []
+    temp:
+      attrs:
+        variant: StandardScaler
+      data: 8.50112533569336
+      dims: !!python/tuple []
+  dims: {}

@@ -14,20 +14,27 @@
 PYTHON_VENV=".venv"
 
 # Clear SLURM logs (*.out and *.err files)
-rm -rf logs_slurm checkpoints* mllogs* ray_checkpoints
-mkdir logs_slurm
-rm -rf logs_torchrun
+read -p "Delete all existing scalability metrics and logs y/n?: " answer
+if [[ "$answer" =~ ^[Yy]$ ]]; then
+    rm -rf scalability-metrics logs_* checkpoints_* plots mllogs outputs ray_checkpoints
+fi
+mkdir -p logs_slurm
 
 export HYDRA_FULL_ERROR=1
 
 # DDP itwinai
 DIST_MODE="ddp"
 RUN_NAME="hython-juwels-runall-ddp"
-TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=ddp run_name=hython-juwels-runall-ddp"
+NNODES=2
+NGPUS_PER_NODE=4
+TOT_GPUS=$(($NNODES * $NGPUS_PER_NODE))
+
+TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=ddp run_name=hython-juwels-runall-ddp num_workers_per_trial=$TOT_GPUS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$RUN_NAME-n$N" \
     --output="logs_slurm/job-$RUN_NAME-n$N.out" \
     --error="logs_slurm/job-$RUN_NAME-n$N.err" \
+    --nodes=$NNODES --gpus-per-node=$NGPUS_PER_NODE \
     ./scripts/slurm.juwels.sh
 
 # # DeepSpeed itwinai
