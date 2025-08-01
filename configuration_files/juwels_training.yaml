@@ -101,7 +101,7 @@ num_workers_dataloader: 8
 num_workers_per_trial: 2
 cpu_per_worker: 11
 gpu_per_worker: 1 # 0. - 1
-trials: 2
+trials: 1
 
 
 data_source:
@@ -228,7 +228,7 @@ training:
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_name}
-        experiment_name: ${experiment_name}
+        # experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
@@ -312,7 +312,7 @@ hpo:
       model: ${model}
       config:
         experiment: ${experiment_name}/${run_name}
-        experiment_name: ${experiment_name}
+        # experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
         learning_rate: ${learning_rate}
