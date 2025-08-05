@@ -133,20 +133,6 @@ function ray-launcher(){
   $1 +pipe_key=hpo
 }
 
-# function torchrun-launcher(){
-#   srun --cpu-bind=none --ntasks-per-node=1 \
-#     bash -c "torchrun \
-#     --log_dir='logs_torchrun' \
-#     --nnodes=$SLURM_NNODES \
-#     --nproc_per_node=$SLURM_GPUS_PER_NODE \
-#     --rdzv_id=$SLURM_JOB_ID \
-#     --rdzv_conf=is_host=\$(((SLURM_NODEID)) && echo 0 || echo 1) \
-#     --rdzv_backend=c10d \
-#     --rdzv_endpoint='$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)'i:29500 \
-#     --no-python \
-#     $1 +pipe_key=training"
-# }
-
 function torchrun-launcher(){
   export MASTER_ADDR="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)i"
   export MASTER_PORT=54123
@@ -218,9 +204,6 @@ elif [ "$DIST_MODE" == "horovod" ] ; then
   echo "HOROVOD training: $TRAINING_CMD"
   srun-launcher "$TRAINING_CMD"
 
-  # separation
-
-  # ray-launcher "$TRAINING_CMD"
 else
   >&2 echo "ERROR: unrecognized \$DIST_MODE env variable"
   exit 1
