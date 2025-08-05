@@ -1,5 +1,4 @@
 import logging
-import os
 from functools import partial
 from pathlib import Path
 from timeit import default_timer
@@ -675,7 +674,8 @@ class RNNDistributedTrainer(TorchTrainer):
         )
         # check if train_dataset has different time ranges for different batches
         print(
-            f"[Rank {self.strategy.global_rank()}] len(train_loader) = {len(self.train_dataloader)}"
+            f"[Rank {self.strategy.global_rank()}] len(train_loader)"
+            f" = {len(self.train_dataloader)}"
         )
 
         self.train_time_range = train_dataset[0]["xd"].shape[0]
