@@ -30,7 +30,7 @@ NGPUS_PER_NODE=4
 TOT_GPUS=$(($NNODES * $NGPUS_PER_NODE))
 NUM_TRIALS=1
 
-TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=ddp run_name=hython-juwels-runall-ddp num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
+TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=ddp run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$RUN_NAME-n$N" \
     --output="logs_slurm/job-$RUN_NAME-n$TOT_GPUS.out" \
@@ -41,7 +41,7 @@ sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$T
 # DeepSpeed itwinai
 DIST_MODE="deepspeed"
 RUN_NAME="hython-juwels-runall-deepspeed"
-TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=deepspeed run_name=hython-juwels-runall-deepspeed num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
+TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=deepspeed run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$RUN_NAME-n$N" \
     --output="logs_slurm/job-$RUN_NAME-n$TOT_GPUS.out" \
@@ -52,7 +52,7 @@ sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$T
 # Horovod itwinai
 DIST_MODE="horovod"
 RUN_NAME="hython-juwels-runall-horovod"
-TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=horovod run_name=hython-juwels-runall-horovod num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
+TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=horovod run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",RUN_NAME="$RUN_NAME",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$RUN_NAME-n$N" \
     --output="logs_slurm/job-$RUN_NAME-n$TOT_GPUS.out" \
