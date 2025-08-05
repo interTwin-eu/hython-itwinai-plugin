@@ -18,9 +18,9 @@ run_name: "juwels-train-eurac-1"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
-train_temporal_range: ["2018-01-01", "2019-12-31"]
+train_temporal_range: ["2017-01-01", "2019-12-31"]
 valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2022-06-01", "2022-12-31"]
+test_temporal_range: ["2022-01-01", "2022-12-31"]
 
 seed: 10 
 
