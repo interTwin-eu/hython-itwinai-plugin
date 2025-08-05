@@ -18,8 +18,8 @@ run_name: "juwels-train-eurac-1"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
-train_temporal_range: ["2019-06-01", "2019-12-31"]
-valid_temporal_range: ["2020-06-01", "2020-12-31"]
+train_temporal_range: ["2018-01-01", "2019-12-31"]
+valid_temporal_range: ["2020-01-01", "2020-12-31"]
 test_temporal_range: ["2022-06-01", "2022-12-31"]
 
 seed: 10 
@@ -56,13 +56,13 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 10
+seq_length: 180
 
 learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
+epochs: 5
 time_ray: True
 
 gradient_clip:
@@ -80,12 +80,12 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 test_downsampler: null
 
