@@ -1,5 +1,4 @@
 import logging
-import os
 from functools import partial
 from pathlib import Path
 from timeit import default_timer
@@ -17,15 +16,11 @@ from torchmetrics import Metric
 from tqdm.auto import tqdm
 
 from hython.models import get_model_class as get_hython_model
-from hython.sampler import SamplerBuilder
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
+from itwinai.constants import EPOCH_TIME_DIR
 from itwinai.distributed import suppress_workers_print
 from itwinai.loggers import EpochTimeTracker, Logger
-from itwinai.torch.distributed import (
-    HorovodStrategy,
-    NonDistributedStrategy,
-)
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
@@ -248,7 +243,7 @@ class RNNDistributedTrainer(TorchTrainer):
         # Distributed model, optimizer, and scheduler
         distribute_kwargs = self.get_default_distributed_kwargs()
         py_logger.info("Distributing model, optimizer, and scheduler")
-        (self.model, self.optimizer, lr_scheduler) = self.strategy.distributed(
+        (self.model, self.optimizer, self.lr_scheduler) = self.strategy.distributed(
             self.model,
             self.optimizer,
             # ! -> not _LRScheduler but LRScheduler
@@ -265,19 +260,6 @@ class RNNDistributedTrainer(TorchTrainer):
         """
         self.loss = instantiate({"loss_fn": self.config.loss_fn})["loss_fn"]
 
-    def set_epoch(self) -> None:
-        """Set the epoch for the sampler.
-
-        Args:
-            epoch (int): epoch
-        """
-        if self.profiler is not None and self.current_epoch > 0:
-            self.profiler.step()
-
-        if self.lr_scheduler:
-            self.lr_scheduler.step()
-        self._set_epoch_dataloaders(self.current_epoch)
-
     def train_epoch(self) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Train the model.
 
@@ -286,8 +268,7 @@ class RNNDistributedTrainer(TorchTrainer):
                 training loss, training metric
         """
         self.model.train()
-        if self.train_dataloader is None:
-            raise ValueError("Train dataloader is None")
+
         train_loss, train_metric = self.epoch_step(
             self.model, self.train_dataloader, opt=self.optimizer
         )
@@ -375,8 +356,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 if "y_hat" in prediction
                 else prediction["mu"].size(0)
             )
-            if self.train_dataloader is None:
-                raise ValueError("Train dataloader is None")
             expected_samples = len(self.train_dataloader) * batch_size
             self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
             self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
@@ -544,24 +523,21 @@ class RNNDistributedTrainer(TorchTrainer):
         # Tracking epoch times for scaling test
         epoch_time_tracker: EpochTimeTracker | None = None
         if self.strategy.is_main_worker:
-            # get number of nodes, defaults to unknown (unk)
-            try:
-                num_nodes = int(os.environ.get("SLURM_NNODES", 1))  # type: ignore
-            except Exception:
-                raise ValueError(
-                    f"SLURM_NNODES is not convertible to int: {os.environ.get('SLURM_NNODES')}"
-                    "Make sure SLURM_NNODES is set properly."
-                )
-
-            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_id}/epoch-time")
-            epoch_time_file_name = f"epochtime_{self.strategy.name}_{num_nodes}N.csv"
+            epoch_time_output_dir = Path(
+                f"scalability-metrics/{self.run_name}/{EPOCH_TIME_DIR}"
+            )
+            epoch_time_file_name = (
+                f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
+            )
             epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
 
             epoch_time_tracker = EpochTimeTracker(
                 strategy_name=self.strategy.name,
                 save_path=epoch_time_output_path,
-                num_nodes=num_nodes,
-                should_log=self.measure_epoch_time,
+                num_workers=self.strategy.global_world_size(),
+                should_log=self.measure_epoch_time
+                and self.strategy.is_main_worker
+                and self.strategy.is_distributed,
             )
 
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
@@ -589,12 +565,7 @@ class RNNDistributedTrainer(TorchTrainer):
             # best_ckpt_path = None
 
             # gather losses from each worker and place them on the main worker.
-            worker_val_losses = time_and_log(
-                func=partial(self.strategy.gather, tensor=val_loss, dst_rank=0),
-                logger=self.logger,
-                identifier="gather_loss_time_s_per_epoch",
-                step=self.current_epoch,
-            )
+            worker_val_losses = self.strategy.gather(tensor=val_loss, dst_rank=0)
             if self.strategy.is_main_worker:
                 avg_val_loss = torch.mean(torch.stack(worker_val_losses)).detach().cpu()
                 if avg_val_loss < best_loss:
@@ -684,8 +655,8 @@ class RNNDistributedTrainer(TorchTrainer):
     def create_dataloaders(
         self,
         train_dataset: Dataset,
-        validation_dataset: Dataset,
-        test_dataset: Dataset | None,  # ? TODO: Why not used?
+        validation_dataset: Dataset | None = None,
+        test_dataset: Dataset | None = None,  # ? TODO: Why not used?
     ) -> None:
         """Create the dataloaders.
 
@@ -694,48 +665,19 @@ class RNNDistributedTrainer(TorchTrainer):
             validation_dataset (Dataset): validation dataset
             test_dataset (Dataset | None): test dataset (not used currently)
         """
-        sampling_kwargs = {}
-        if isinstance(self.strategy, HorovodStrategy):
-            sampling_kwargs["num_replicas"] = self.strategy.global_world_size()
-            sampling_kwargs["rank"] = self.strategy.global_rank()
-
-        if isinstance(self.strategy, NonDistributedStrategy):
-            processing = "single-gpu"
-        else:
-            processing = "multi-gpu"
-
-        train_sampler_builder = SamplerBuilder(
-            self.config,
-            train_dataset,
-            sampling="temporal-downsampling-random",
-            processing=processing,
-            sampling_kwargs=sampling_kwargs,
-        )
-        val_sampler_builder = SamplerBuilder(
-            self.config,
-            validation_dataset,
-            sampling="temporal-downsampling-sequential",
-            processing=processing,
-            sampling_kwargs=sampling_kwargs,
-        )
-
-        train_sampler = train_sampler_builder.get_sampler()
-        val_sampler = val_sampler_builder.get_sampler()
-
-        batch_size = self.config.batch_size // self.strategy.global_world_size()
         self.train_dataloader = self.strategy.create_dataloader(
             dataset=train_dataset,
-            batch_size=batch_size,
+            batch_size=self.config.batch_size,
             num_workers=self.config.num_workers_dataloader,
-            pin_memory=True,
-            prefetch_factor=4,
-            persistent_workers=True,  # Keep workers alive between iterations
+            pin_memory=self.config.pin_gpu_memory,
             generator=self.torch_rng,
-            sampler=train_sampler,
-            drop_last=True,
-        )  # ! drop_last=True, throws errors for samples < batch size, as empty then
-        # (can happen for strong downsampling)
+            shuffle=self.config.shuffle_train,
+        )
         # check if train_dataset has different time ranges for different batches
+        print(
+            f"[Rank {self.strategy.global_rank()}] len(train_loader)"
+            f" = {len(self.train_dataloader)}"
+        )
 
         self.train_time_range = train_dataset[0]["xd"].shape[0]
 
@@ -743,12 +685,10 @@ class RNNDistributedTrainer(TorchTrainer):
         if validation_dataset is not None:
             self.validation_dataloader = self.strategy.create_dataloader(
                 dataset=validation_dataset,
-                batch_size=batch_size,
+                batch_size=self.config.batch_size,
                 num_workers=self.config.num_workers_dataloader,
                 pin_memory=self.config.pin_gpu_memory,
                 generator=self.torch_rng,
-                sampler=val_sampler,
-                drop_last=True,
-            )  # ! drop_last=True, throws errors for samples < batch size
-            # (can happen for strong downsampling)
+                shuffle=self.config.shuffle_validation,
+            )
             self.val_time_range = validation_dataset[0]["xd"].shape[0]
