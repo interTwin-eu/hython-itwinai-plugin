@@ -1,7 +1,6 @@
 import logging
 from functools import partial
-from pathlib import Path
-from timeit import default_timer
+from time import perf_counter
 from typing import Any, Dict, Literal, Tuple
 
 import numpy as np
@@ -18,9 +17,8 @@ from tqdm.auto import tqdm
 from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
-from itwinai.constants import EPOCH_TIME_DIR
 from itwinai.distributed import suppress_workers_print
-from itwinai.loggers import EpochTimeTracker, Logger
+from itwinai.loggers import Logger
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
@@ -520,26 +518,6 @@ class RNNDistributedTrainer(TorchTrainer):
     @profile_torch_trainer
     @measure_gpu_utilization
     def train(self) -> None:
-        # Tracking epoch times for scaling test
-        epoch_time_tracker: EpochTimeTracker | None = None
-        if self.strategy.is_main_worker:
-            epoch_time_output_dir = Path(
-                f"scalability-metrics/{self.run_name}/{EPOCH_TIME_DIR}"
-            )
-            epoch_time_file_name = (
-                f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
-            )
-            epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
-
-            epoch_time_tracker = EpochTimeTracker(
-                strategy_name=self.strategy.name,
-                save_path=epoch_time_output_path,
-                num_workers=self.strategy.global_world_size(),
-                should_log=self.measure_epoch_time
-                and self.strategy.is_main_worker
-                and self.strategy.is_distributed,
-            )
-
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         # add empty validation metrics
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
@@ -552,7 +530,7 @@ class RNNDistributedTrainer(TorchTrainer):
             disable=self.disable_tqdm or not self.strategy.is_main_worker,
         )
         for self.current_epoch in progress_bar:
-            epoch_start_time = default_timer()
+            epoch_start_time = perf_counter()
             progress_bar.set_description(f"Epoch {self.current_epoch + 1}/{self.epochs}")
             self.set_epoch()
             # run train and validation epoch step of hython trainer
@@ -609,11 +587,15 @@ class RNNDistributedTrainer(TorchTrainer):
             if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
                 self.test_epoch()
 
-            # only main worker and for distributed
-            if self.strategy.is_main_worker and self.strategy.is_distributed:
-                assert epoch_time_tracker is not None
-                epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
+            # Measure epoch time and log
+            if self.strategy.is_main_worker:
+                epoch_time = perf_counter() - epoch_start_time
+                self.log(
+                    item=epoch_time,
+                    identifier="epoch_time_s",
+                    kind="metric",
+                    step=self.current_epoch,
+                )
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
@@ -656,14 +638,14 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         train_dataset: Dataset,
         validation_dataset: Dataset | None = None,
-        test_dataset: Dataset | None = None,  # ? TODO: Why not used?
+        test_dataset: Dataset | None = None,  # ignored in training
     ) -> None:
         """Create the dataloaders.
 
         Args:
             train_dataset (Dataset): training dataset
             validation_dataset (Dataset): validation dataset
-            test_dataset (Dataset | None): test dataset (not used currently)
+            test_dataset (Dataset | None): test dataset (ignored in training)
         """
         self.train_dataloader = self.strategy.create_dataloader(
             dataset=train_dataset,
