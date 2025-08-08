@@ -1,13 +1,19 @@
 #!/bin/bash
 
-# --------------------------------------------------------------------------------------
-# Part of the interTwin Project: https://www.intertwin.eu/
-#
-# Created by: Linus Eickhoff
-#
-# Credit:
-# - Linus Eickhoff <linus.maximilian.eickhoff@cern.ch>
-# --------------------------------------------------------------------------------------
+# Job configuration
+#SBATCH --job-name=installation
+#SBATCH --account=s24r05-03-users
+#SBATCH --partition=gpu
+#SBATCH --time=00:25:00
+
+#SBATCH --output=installation.out
+#SBATCH --error=installation.err
+
+# Resource allocation
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gpus-per-node=1
 
 ml --force purge
 ml CMake/3.29.3-GCCcore-13.3.0

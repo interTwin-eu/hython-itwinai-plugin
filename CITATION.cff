@@ -2,7 +2,7 @@
 # Visit https://bit.ly/cffinit to generate yours today!
 
 cff-version: 1.2.0
-title: itwinai-plugin-template
+title: hython-itwinai-plugin
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
@@ -14,12 +14,18 @@ authors:
     email: matteo.bunino@cern.ch
     affiliation: CERN
     orcid: 'https://orcid.org/0009-0008-5100-9300'
+  - given-names: Linus
+    family-names: Eickhoff
+    email: linus.maximilian.eickhoff@cern.ch
+    affiliation: CERN
+    orcid: 'https://orcid.org/0009-0006-6691-2821'
   
-repository-code: 'https://github.com/interTwin-eu/itwinai-plugin-template'
+repository-code: 'https://github.com/interTwin-eu/hython-itwinai-plugin'
 url: 'https://itwinai.readthedocs.io/'
-abstract: AI on cloud and HPC made simple for science
+abstract: itwinai plugin for distributed training of hydrological models
 keywords:
   - Artificial intelligence
+  - Time Series
   - Machine learning
   - Digital twins
   - Climate research

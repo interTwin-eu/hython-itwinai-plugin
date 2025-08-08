@@ -11,16 +11,16 @@
 # - Linus Maximilian Eickhoff <linus.maximilian.eickhoff@cern.ch> - CERN
 # --------------------------------------------------------------------------------------
 
-#! change run or exp name for each user (overwrite will fail due to permissions)
+#! change run or exp name for each user on JSC (overwrite will fail due to permissions)
 # General configuration
-experiment_name: "juwels-train-eurac"
-run_name: "juwels-train-eurac-1"
+experiment_name: "vega-scaling-test"
+run_id: "eurac-scaling-0"
 
-work_dir: /p/scratch/intertwin/datasets/eurac/model
+work_dir: /ceph/hpc/data/st2301-itwin-users/eurac/model
 
-train_temporal_range: ["2019-06-01", "2019-12-31"]
-valid_temporal_range: ["2020-06-01", "2020-12-31"]
-test_temporal_range: ["2022-06-01", "2022-12-31"]
+train_temporal_range: ["2018-01-01", "2019-12-31"]
+valid_temporal_range: ["2020-01-01", "2020-12-31"]
+test_temporal_range: ["2019-01-01", "2020-12-31"]
 
 seed: 10 
 
@@ -47,6 +47,10 @@ hython_trainer: rnntrainer
 
 loss_fn:
   _target_: hython.losses.RMSELoss
+metric_fn:
+  _target_: hython.metrics.MSEMetric
+# TODO: Hython Metrics dont have a __name__ attribute, please add, so this is not needed:
+metric_name: MSEMetric
 
 optimizer: adam
 
@@ -56,13 +60,13 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 10
+seq_length: 180
 
 learning_rate: 0.001
 
 batch: 512
 
-epochs: 2
+epochs: 4
 time_ray: True
 
 gradient_clip:
@@ -80,35 +84,37 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.05
+  frac_space: 0.1
 
 test_downsampler: null
 
+
+#  dynamic 
 dynamic_downsampler:
-    frac_time: 0.1
+    frac_time: 0.2
 
 # === Data ===
 data_lazy_load: False
 dataset: WflowSBM_HPC
-num_workers_dataloader: 8
+num_workers_dataloader: 12
 
 # === Ray HPO ===
-num_workers_per_trial: 2
-cpu_per_worker: 11
+num_workers_per_trial: 1
+cpu_per_worker: 16 # 128 cores per node
 gpu_per_worker: 1 # 0. - 1
-trials: 2
+trials: 64
 
 
 data_source:
   file:
-    static_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_static.zarr
-    dynamic_inputs: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
-    target_variables: /p/scratch/intertwin/datasets/eurac/input/emo1_dynamic.zarr
+    static_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_static.zarr
+    dynamic_inputs: /ceph/hpc/data/st2301-itwin-users/eurac/eobs_dynamic.zarr
+    target_variables: /ceph/hpc/data/st2301-itwin-users/eurac/input/eobs_dynamic.zarr
 # s3:
   #   url: https://eurac-eo.s3.amazonaws.com/INTERTWIN/SURROGATE_INPUT/adg1km_eobs_preprocessed.zarr/
 
@@ -117,7 +123,7 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  # - thetaS
+  - thetaS
   - thetaR
   - KsatVer
   - c
@@ -134,72 +140,21 @@ mask_variables:
   - mask_missing
   - mask_lake
 
-# Preprocess
-preprocessor:
-    # static_inputs:
-    #     lazy: False
-    #     variant:
-    #       - _target_: hython.preprocessor.Log10p
-    #         variable:
-    #             - "KsatVer"
-    dynamic_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.preprocessor.Log10p
-            variable:
-                - "precip"
+# Scaling
 
-# Scaling 
+scaling_variant: minmax
 scaling_use_cached: False
-scaling_static_range:
-    thetaS: [0.25, 0.95] 
-    thetaR: [0.01, 0.35] # it was 0.25 in table
-    KsatVer: [1, 10000]
-    c: [1, 20]
-    f: [0.00001, 0.1] # from training data (it is fitted)
-    M: [1, 3000]
-    RootingDepth: [100, 2000 ] #5000] # (mm)
-    Swood: [0.0, 0.5] # -
-    Sl: [0.02, 0.2] #(mm)
-    Kext: [0.48, 0.96] # 
-
-
-scaler:
-    static_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.BoundedScaler
-            variable:
-              thetaR: ${scaling_static_range.thetaR}
-              KsatVer: ${scaling_static_range.KsatVer}
-              c: ${scaling_static_range.c}
-    dynamic_inputs:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.MinMax01Scaler
-            variable:
-              - "pet"
-              - "precip"
-          - _target_: hython.scaler.StandardScaler
-            variable:
-              - "temp"
-    target_variables:
-        lazy: False
-        variant:
-          - _target_: hython.scaler.MinMax01Scaler
-            variable: ${target_variables}
-
 
 # MLFLow
-tracking_uri: null # http://mlflow.intertwin.fedcloud.eu/
+tracking_uri: http://mlflow.intertwin.fedcloud.eu/
 
 model_logger:
   CudaLSTM:
       logger: local
       model_component: model # the main model
       model_name: ${model}
-      model_uri: ${work_dir}/${experiment_name}_${run_name}/${model}.pt
-      log: True
+      model_uri: $work_dir/${experiment_name}_${run_id}/${model}.pt
+      log: False
       load: False
 
 training:
@@ -216,8 +171,7 @@ training:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      preprocessor: ${preprocessor}
-      scaler: ${scaler}
+      scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -227,7 +181,7 @@ training:
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
-        experiment: ${experiment_name}/${run_name}
+        experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
@@ -256,21 +210,22 @@ training:
         model_head_kwargs: ${model_head_kwargs}
 
         loss_fn: ${loss_fn}
+        metric_fn: ${metric_fn}
+        metric_name: ${metric_name}
+
         gradient_clip: ${gradient_clip}
+
         predict_steps: ${predict_steps}
 
         # model logger
         model_logger: ${model_logger}
         
-      run_name: ${run_name}
+      run_id: $(run_id)
       strategy: ${strategy}
       epochs: ${epochs}
-      metrics:
-        mse:
-          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      enable_torch_profiling: False
+      torch_profiling: False
       random_seed: ${seed}
       profiling_wait_epochs: 1
       profiling_warmup_epochs: 1
@@ -281,8 +236,7 @@ training:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            log_on_workers: -1
-            run_name: ${run_name}
+            run_name: ${run_id}
             log_freq: epoch
             tracking_uri: ${tracking_uri}
 
@@ -300,8 +254,7 @@ hpo:
       dataset: ${dataset}
       data_lazy_load: ${data_lazy_load}
       data_source: ${data_source}
-      preprocessor: ${preprocessor}
-      scaler: ${scaler}
+      scaling_variant: ${scaling_variant}
       scaling_use_cached: ${scaling_use_cached}
       experiment_name: ${experiment_name}
       work_dir: ${work_dir}
@@ -311,7 +264,7 @@ hpo:
     - _target_: itwinai.plugins.hython.trainer.RNNDistributedTrainer
       model: ${model}
       config:
-        experiment: ${experiment_name}/${run_name}
+        experiment: ${experiment_name}/${run_id}
         experiment_name: ${experiment_name}
         work_dir: ${work_dir}
         batch_size: ${batch}
@@ -330,6 +283,8 @@ hpo:
         target_weights: ${target_weights}
 
         # model config
+
+
         hidden_size: ${hidden_size}
         dropout: ${dropout}
         lstm_layers: ${lstm_layers}
@@ -340,6 +295,9 @@ hpo:
         model_head_kwargs: ${model_head_kwargs}
 
         loss_fn: ${loss_fn}
+        metric_fn: ${metric_fn}
+        metric_name: ${metric_name}
+
         gradient_clip: ${gradient_clip}
 
         predict_steps: ${predict_steps}
@@ -347,16 +305,13 @@ hpo:
         # model logger
         model_logger: ${model_logger}
         
-      run_name: ${run_name}
+      run_id: $(run_id)
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
-      metrics:
-        mse:
-          _target_: torchmetrics.regression.MeanSquaredError
       measure_gpu_data: True
       measure_epoch_time: True
-      enable_torch_profiling: False
+      torch_profiling: True
       random_seed: ${seed}
       profiling_wait_epochs: 0
       profiling_warmup_epochs: 1
@@ -367,9 +322,8 @@ hpo:
             log_freq: 1
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
-            run_name: ${run_name}
+            run_name: ${run_id}
             log_freq: epoch
-            log_on_workers: -1
             tracking_uri: ${tracking_uri}
                     
       ray_scaling_config:
@@ -394,13 +348,13 @@ hpo:
         _target_: ray.tune.RunConfig
         # storage_path must be an absolute path. Defaulting to the directory from which the
         # job is launched using the itwinai custom OmegaConf resolver ${itwinai.cwd:}
-        storage_path: ${itwinai.cwd:}/ray_checkpoints
+        storage_path: /ceph/hpc/data/st2301-itwin-users/${run_id}/ray_checkpoints
         name: EURAC-HPO-Experiment
       ray_search_space:
         batch_size:
           type: qrandint
-          lower: 128
-          upper: 1024
+          lower: 256
+          upper: 512
           q: 128
         optim_lr:
           type: uniform
@@ -408,13 +362,17 @@ hpo:
           upper: 1e-2
         hidden_size:
           type: randint
-          lower: 16
+          lower: 128
           upper: 512
         dropout:
           type: choice
           categories: [0.1, 0.2, 0.3, 0.4, 0.5]
         seq_length:
           type: qrandint
-          lower: 90
+          lower: 100
           upper: 365
           q: 30
+        interval_value:
+          type: choice
+          categories: [3, 5, 10]
+        
