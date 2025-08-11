@@ -24,7 +24,7 @@ from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
 from itwinai.utils import time_and_log
 
 from .config import HythonConfiguration
-from .data import prepare_batch_for_device
+from .data import prepare_batch_for_device, xarray_collate_fn
 
 py_logger = logging.getLogger(__name__)
 
@@ -646,6 +646,7 @@ class RNNDistributedTrainer(TorchTrainer):
             pin_memory=self.config.pin_gpu_memory,
             generator=self.torch_rng,
             shuffle=self.config.shuffle_train,
+            collate_fn=xarray_collate_fn,
         )
         # check if train_dataset has different time ranges for different batches
         print(
@@ -666,5 +667,6 @@ class RNNDistributedTrainer(TorchTrainer):
                 pin_memory=self.config.pin_gpu_memory,
                 generator=self.torch_rng,
                 shuffle=self.config.shuffle_validation,
+                collate_fn=xarray_collate_fn,
             )
             self.val_time_range = getattr(self.config, "seq_length", 0)

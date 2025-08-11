@@ -2,6 +2,8 @@ import logging
 from typing import Dict, List, Tuple
 
 import torch
+import xarray as xr
+from torch.utils.data._utils.collate import default_collate
 
 from hython.config import Config
 from hython.datasets import get_dataset
@@ -10,6 +12,33 @@ from hython.scaler import Scaler
 from itwinai.components import DataSplitter, monitor_exec
 
 py_logger = logging.getLogger(__name__)
+
+
+def xarray_collate_fn(batch):
+    """Custom collate function to handle xarray DataArrays with zero-copy tensor views.
+    Converts xarray DataArrays to PyTorch tensors using views (no copying).
+
+    Args:
+        batch: List of samples from the dataset
+
+    Returns:
+        Collated batch with tensor views instead of DataArrays
+    """
+    def convert_xarray_to_tensor_view(item):
+        """Recursively convert xarray DataArrays to PyTorch tensor views (zero-copy)."""
+        if isinstance(item, xr.DataArray):
+            # Use as_tensor for zero-copy view instead of from_numpy which copies
+            return torch.as_tensor(item.values)
+        elif isinstance(item, dict):
+            return {k: convert_xarray_to_tensor_view(v) for k, v in item.items()}
+        elif isinstance(item, (list, tuple)):
+            return type(item)(convert_xarray_to_tensor_view(v) for v in item)
+        else:
+            return item
+
+    converted_batch = [convert_xarray_to_tensor_view(sample) for sample in batch]
+
+    return default_collate(converted_batch)
 
 
 class RNNDatasetGetterAndPreprocessor(DataSplitter):
