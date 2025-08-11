@@ -16,7 +16,7 @@ partition: gpu
 
 num_nodes: 1
 gpus_per_node: 4
-cpus_per_task: 4
+cpus_per_task: 12
 
 python_venv: .venv
 pipe_key: training

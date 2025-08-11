@@ -4,7 +4,7 @@
 #SBATCH --job-name=horovod-2x4
 #SBATCH --account=s24r05-03-users
 #SBATCH --partition=gpu
-#SBATCH --time=00:30:00
+#SBATCH --time=01:30:00
 
 #SBATCH --output=slurm-job-logs/horovod-2x4.out
 #SBATCH --error=slurm-job-logs/horovod-2x4.err
@@ -12,7 +12,7 @@
 # Resource allocation
 #SBATCH --nodes=2
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=12
 #SBATCH --gpus-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --mem=384G

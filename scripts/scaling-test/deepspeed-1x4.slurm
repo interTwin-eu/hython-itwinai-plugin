@@ -4,7 +4,7 @@
 #SBATCH --job-name=deepspeed-1x4
 #SBATCH --account=s24r05-03-users
 #SBATCH --partition=gpu
-#SBATCH --time=00:30:00
+#SBATCH --time=01:30:00
 
 #SBATCH --output=slurm-job-logs/deepspeed-1x4.out
 #SBATCH --error=slurm-job-logs/deepspeed-1x4.err
@@ -12,7 +12,7 @@
 # Resource allocation
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=12
 #SBATCH --gpus-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --mem=384G
@@ -28,7 +28,7 @@ echo "DEBUG: SLURM_SUBMIT_HOST: $SLURM_SUBMIT_HOST"
 echo "DEBUG: SLURMD_NODENAME: $SLURMD_NODENAME"
 echo "DEBUG: SLURM_GPUS_PER_NODE: $SLURM_GPUS_PER_NODE"
 echo "DEBUG: CUDA_VISIBLE_DEVICES (before): $CUDA_VISIBLE_DEVICES"
-echo "DEBUG: DIST_MODE: $DIST_MODE"
+#SBATCH --cpus-per-task=12
 echo
 
 # Load environment modules

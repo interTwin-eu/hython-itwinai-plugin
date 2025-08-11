@@ -14,6 +14,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-gpu=8
+#SBATCH --mem=384G
 #SBATCH --exclusive
 
 # Pre-execution command

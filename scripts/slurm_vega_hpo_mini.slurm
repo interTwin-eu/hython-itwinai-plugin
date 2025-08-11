@@ -12,6 +12,7 @@
 # Resource allocation
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=2
+#SBATCH --mem=128G
 #SBATCH --cpus-per-gpu=8
 
 # Pre-execution command

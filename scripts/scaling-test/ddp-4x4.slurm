@@ -4,15 +4,15 @@
 #SBATCH --job-name=ddp-4x4
 #SBATCH --account=s24r05-03-users
 #SBATCH --partition=gpu
-#SBATCH --time=00:30:00
+#SBATCH --time=01:30:00
 
 #SBATCH --output=slurm-job-logs/ddp-4x4.out
 #SBATCH --error=slurm-job-logs/ddp-4x4.err
 
 # Resource allocation
-#SBATCH --nodes=4
+#SBATCH --time=01:30:00
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=12
 #SBATCH --gpus-per-node=4
 #SBATCH --gres=gpu:4
 #SBATCH --mem=384G

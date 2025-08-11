@@ -60,7 +60,7 @@ seq_length: 30
 
 learning_rate: 0.001
 
-batch: 256
+batch: 512
 
 epochs: 5
 time_ray: True
@@ -95,7 +95,7 @@ dynamic_downsampler:
     frac_time: 0.1
 
 # === Data ===
-data_lazy_load: False
+data_lazy_load: True
 dataset: WflowSBM_HPC
 num_workers_dataloader: 8
 
@@ -353,7 +353,7 @@ hpo:
         # model logger
         model_logger: ${model_logger}
         
-      run_name: $(run_name)
+      run_name: ${run_name}
       time_ray: ${time_ray}
       strategy: ${strategy}
       epochs: ${epochs}
