@@ -3,17 +3,8 @@ from functools import partial
 from time import perf_counter
 from typing import Any, Dict, Literal, Tuple
 
-import numpy as np
 import torch
 from hydra.utils import instantiate
-from torch import nn
-from torch.nn.modules.loss import _Loss
-from torch.optim.lr_scheduler import LRScheduler
-from torch.optim.optimizer import Optimizer
-from torch.utils.data import DataLoader, Dataset
-from torchmetrics import Metric
-from tqdm.auto import tqdm
-
 from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
@@ -23,6 +14,13 @@ from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
 from itwinai.utils import time_and_log
+from torch import nn
+from torch.nn.modules.loss import _Loss
+from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.optimizer import Optimizer
+from torch.utils.data import DataLoader, Dataset
+from torchmetrics import Metric
+from tqdm.auto import tqdm
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
@@ -339,30 +337,20 @@ class RNNDistributedTrainer(TorchTrainer):
 
         # prediction can be probabilistic
         if self.config.model_head_layer == "regression":
-            pred_cpu = prediction["y_hat"].detach().cpu().numpy()
+            pred_tensor = prediction["y_hat"].detach().cpu()
         elif self.config.model_head_layer == "distr_normal":
-            pred_cpu = prediction["mu"].detach().cpu().numpy()
+            pred_tensor = prediction["mu"].detach().cpu()
         else:
             raise ValueError(f"Unknown model head layer: {self.config.model_head_layer}")
 
-        target_cpu = target.detach().cpu().numpy()
+        target_tensor = target.detach().cpu()
 
         if self.epoch_preds is None:
-            # Pre-allocate memory for results
-            batch_size = (
-                prediction["y_hat"].size(0)
-                if "y_hat" in prediction
-                else prediction["mu"].size(0)
-            )
-            expected_samples = len(self.train_dataloader) * batch_size
-            self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
-            self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
-        else:
-            arrays = [self.epoch_preds, pred_cpu]
-            self.epoch_preds = torch.from_numpy(np.concatenate(arrays, axis=0))
+            self.epoch_preds = []
+            self.epoch_targets = []
 
-            arrays = [self.epoch_targets, target_cpu]
-            self.epoch_targets = torch.from_numpy(np.concatenate(arrays, axis=0))
+        self.epoch_preds.append(pred_tensor)
+        self.epoch_targets.append(target_tensor)
 
     def _compute_batch_loss(
         self,
@@ -481,8 +469,8 @@ class RNNDistributedTrainer(TorchTrainer):
             dynamic_bt = batch["xd"]
             # process targets
             targets_bt = batch["y"]
-            # process static data
-            static_bt = batch["xs"].unsqueeze(1).expand(-1, dynamic_bt.size(1), -1)
+            batch_size, seq_len, _ = dynamic_bt.shape
+            static_bt = batch["xs"].unsqueeze(1).repeat(1, seq_len, 1)
             # concatenate dynamic and static data
             x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
 
@@ -508,9 +496,12 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.epoch_preds is None or self.epoch_targets is None:
             raise ValueError("epoch_preds or epoch_targets is None")
 
+        epoch_preds_tensor = torch.cat(self.epoch_preds, dim=0)
+        epoch_targets_tensor = torch.cat(self.epoch_targets, dim=0)
+
         metrics = self.compute_metrics(
-            true=self.epoch_targets,
-            pred=self.epoch_preds,
+            true=epoch_targets_tensor,
+            pred=epoch_preds_tensor,
         )
 
         return epoch_loss, metrics
@@ -661,7 +652,9 @@ class RNNDistributedTrainer(TorchTrainer):
             f" = {len(self.train_dataloader)}"
         )
 
-        self.train_time_range = train_dataset[0]["xd"].shape[0]
+        # Get time range from config instead of accessing dataset directly
+        # to avoid triggering full dataset loading
+        self.train_time_range = getattr(self.config, "seq_length", 0)
 
         # Get sequence length from configuration
         if validation_dataset is not None:
@@ -673,4 +666,4 @@ class RNNDistributedTrainer(TorchTrainer):
                 generator=self.torch_rng,
                 shuffle=self.config.shuffle_validation,
             )
-            self.val_time_range = validation_dataset[0]["xd"].shape[0]
+            self.val_time_range = getattr(self.config, "seq_length", 0)
