@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Tuple
 
 import torch
+
 from hython.config import Config
 from hython.datasets import get_dataset
 from hython.datasets.wflow_sbm import WflowSBM

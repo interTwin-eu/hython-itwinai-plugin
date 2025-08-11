@@ -5,6 +5,14 @@ from typing import Any, Dict, Literal, Tuple
 
 import torch
 from hydra.utils import instantiate
+from torch import nn
+from torch.nn.modules.loss import _Loss
+from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.optimizer import Optimizer
+from torch.utils.data import DataLoader, Dataset
+from torchmetrics import Metric
+from tqdm.auto import tqdm
+
 from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
@@ -14,13 +22,6 @@ from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
 from itwinai.utils import time_and_log
-from torch import nn
-from torch.nn.modules.loss import _Loss
-from torch.optim.lr_scheduler import LRScheduler
-from torch.optim.optimizer import Optimizer
-from torch.utils.data import DataLoader, Dataset
-from torchmetrics import Metric
-from tqdm.auto import tqdm
 
 from .config import HythonConfiguration
 from .data import prepare_batch_for_device
