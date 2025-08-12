@@ -590,7 +590,12 @@ class RNNDistributedTrainer(TorchTrainer):
             # only main worker and for distributed
             if self.strategy.is_main_worker and self.strategy.is_distributed:
                 epoch_time = default_timer() - epoch_start_time
-                print(epoch_time)
+                self.log(
+                    item=epoch_time,
+                    identifier="epoch_time_s",
+                    kind="metric",
+                    step=self.current_epoch,
+                )
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
