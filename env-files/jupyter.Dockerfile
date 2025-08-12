@@ -20,5 +20,8 @@ RUN pip install --no-cache-dir .
 # Copy your scripts
 COPY  --chown=${NB_UID} main.py main.py
 
+# Copy tests
+COPY tests tests
+
 # DO NOT SET AN ENTRYPOINT OR A CMD, unless you know what you are doing
 # Otherwise you risk of breaking the spawn in JupyterHub
