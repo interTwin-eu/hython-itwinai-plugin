@@ -2,38 +2,14 @@ import logging
 from typing import Dict, List, Tuple
 
 import torch
+
 from hython.config import Config
 from hython.datasets import get_dataset
 from hython.datasets.wflow_sbm import WflowSBM
 from hython.scaler import Scaler
 from itwinai.components import DataSplitter, monitor_exec
-from xarray import DataArray
 
 py_logger = logging.getLogger(__name__)
-
-
-#! This is a temporary workaround to handle xarray DataArrays efficiently, until __get_item__
-#! is fixed in hython directly.
-class TensorConvertingDataset(torch.utils.data.Dataset):
-    """Wrapper that converts xarray DataArrays to tensors on-demand with zero-copy views.
-    Args:
-        hython_dataset: The underlying hython dataset that may return xarray DataArrays
-    """
-
-    def __init__(self, hython_dataset):
-        self.dataset = hython_dataset
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        sample: DataArray = self.dataset[idx]
-        # Convert xarray DataArrays to tensors using zero-copy views
-        # torch.as_tensor() creates a view of the data without copying
-        return {
-            key: torch.as_tensor(value.values) if hasattr(value, "values") else value
-            for key, value in sample.items()
-        }
 
 
 class RNNDatasetGetterAndPreprocessor(DataSplitter):
@@ -75,14 +51,16 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
 
         # Enable lazy loading to prevent loading entire dataset into memory
         cfg.data_lazy_load = getattr(cfg, "data_lazy_load", True)
+        if cfg.data_lazy_load:
+            cfg.data_lazy_load = False  # type: ignore
+            py_logger.warning(
+                f"(data_lazy_load={cfg.data_lazy_load}) Lazy Loading is not yet supported! "
+                "Deactivated Lazy loading..."
+            )
         scaler = Scaler(cfg, cfg.scaling_use_cached)  # type: ignore
 
-        raw_train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")  # type: ignore
-        raw_val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")  # type: ignore
-
-        # Wrap datasets to handle xarray DataArrays more efficiently (temporary fix)
-        train_dataset = TensorConvertingDataset(raw_train_dataset)
-        val_dataset = TensorConvertingDataset(raw_val_dataset)
+        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")  # type: ignore
+        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")  # type: ignore
 
         if py_logger.isEnabledFor(logging.DEBUG):
             try:
