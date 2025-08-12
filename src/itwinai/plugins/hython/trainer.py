@@ -18,7 +18,6 @@ from tqdm.auto import tqdm
 from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
-from itwinai.constants import EPOCH_TIME_DIR
 from itwinai.distributed import suppress_workers_print
 from itwinai.loggers import EpochTimeTracker, Logger
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
@@ -523,9 +522,7 @@ class RNNDistributedTrainer(TorchTrainer):
         # Tracking epoch times for scaling test
         epoch_time_tracker: EpochTimeTracker | None = None
         if self.strategy.is_main_worker:
-            epoch_time_output_dir = Path(
-                f"scalability-metrics/{self.run_name}/{EPOCH_TIME_DIR}"
-            )
+            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_name}/epochtime")
             epoch_time_file_name = (
                 f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
             )
