@@ -1,6 +1,5 @@
 import logging
 from functools import partial
-from pathlib import Path
 from timeit import default_timer
 from typing import Any, Dict, Literal, Tuple
 
@@ -19,7 +18,7 @@ from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
 from itwinai.distributed import suppress_workers_print
-from itwinai.loggers import EpochTimeTracker, Logger
+from itwinai.loggers import Logger
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
@@ -519,24 +518,6 @@ class RNNDistributedTrainer(TorchTrainer):
     @profile_torch_trainer
     @measure_gpu_utilization
     def train(self) -> None:
-        # Tracking epoch times for scaling test
-        epoch_time_tracker: EpochTimeTracker | None = None
-        if self.strategy.is_main_worker:
-            epoch_time_output_dir = Path(f"scalability-metrics/{self.run_name}/epochtime")
-            epoch_time_file_name = (
-                f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
-            )
-            epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
-
-            epoch_time_tracker = EpochTimeTracker(
-                strategy_name=self.strategy.name,
-                save_path=epoch_time_output_path,
-                num_workers=self.strategy.global_world_size(),
-                should_log=self.measure_epoch_time
-                and self.strategy.is_main_worker
-                and self.strategy.is_distributed,
-            )
-
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         # add empty validation metrics
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
@@ -608,9 +589,8 @@ class RNNDistributedTrainer(TorchTrainer):
 
             # only main worker and for distributed
             if self.strategy.is_main_worker and self.strategy.is_distributed:
-                assert epoch_time_tracker is not None
                 epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
+                print(epoch_time)
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
