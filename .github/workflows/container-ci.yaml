@@ -42,24 +42,22 @@ jobs:
             singularity_registry: "''"
             build_arm: false
             
-            # Uncomment this to build container for jupyterlab
-    #       - base_img_name: "ghcr.io/intertwin-eu/itwinai:jlab-slim-latest"
-    #         img_name: "hython-itwinai-plugin"
-    #         dockerfile: "../env-files/jupyter.Dockerfile"
-    #         nickname: "jlab"
-    #         tag_template: "jlab-itwinai@{itwinai_version}-torch@{framework_version}-@{os_version}"
-    #         skip_hpc: true
-    #         skip_singularity: true
-    #         docker_registry: ghcr.io/intertwin-eu
-    #         singularity_registry: ""
-    #         build_arm: false
+          - base_img_name: "ghcr.io/intertwin-eu/itwinai:jlab-slim-latest"
+            img_name: "hython-itwinai-plugin"
+            dockerfile: "../env-files/jupyter.Dockerfile"
+            nickname: "jlab"
+            tag_template: "jlab-itwinai@{itwinai_version}-torch@{framework_version}-@{os_version}"
+            skip_hpc: true
+            skip_singularity: true
+            docker_registry: ghcr.io/intertwin-eu
+            singularity_registry: "''"
+            build_arm: false
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
 
       - name: Build and Test with Custom Action
-        # TODO: make this point to the main branch
         uses: interTwin-eu/itwinai/.github/actions/build-container@main
         with:
           # Find all the inputs here: https://raw.githubusercontent.com/interTwin-eu/itwinai/refs/heads/main/.github/actions/build-container/action.yml
