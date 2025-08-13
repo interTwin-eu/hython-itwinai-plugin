@@ -14,18 +14,20 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-gpu=8
+#SBATCH --mem=384G
 #SBATCH --exclusive
 
 # Pre-execution command
-ml GCCcore/13.3.0 \
-    CUDA/12.6.0 \
-    UCX-CUDA/1.16.0-GCCcore-13.3.0-CUDA-12.6.0 \
-    NCCL/2.22.3-GCCcore-13.3.0-CUDA-12.6.0 \
-    Python/3.11.5-GCCcore-13.2.0 \
-    CMake/3.24.3-GCCcore-11.3.0 \
-    OpenMPI \
-    mpi4py \
-    OpenSSL/3
+ml --force purge
+ml CMake/3.29.3-GCCcore-13.3.0
+ml mpi4py/3.1.5
+ml OpenMPI/4.1.6-GCC-13.2.0
+ml cuDNN/8.9.7.29-CUDA-12.3.0
+ml CUDA/12.6.0
+ml NCCL/2.22.3-GCCcore-13.3.0-CUDA-12.6.0
+ml Python/3.12.3-GCCcore-13.3.0
+ml OpenSSL/3
+
 source .venv/bin/activate
 timestamp=$(date +%s)
 export OMP_NUM_THREADS=4
@@ -47,5 +49,5 @@ itwinai exec-pipeline \
 --config-name vega_training \
 num_workers_dataloader=4 \
 experiment_name=ddp-1x4-${USER} \
-run_id=ddp-1x4-${timestamp} \
+run_name=ddp-1x4-${timestamp} \
 +pipe_key=hpo"

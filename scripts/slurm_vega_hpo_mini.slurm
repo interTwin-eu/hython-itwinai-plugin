@@ -11,19 +11,20 @@
 
 # Resource allocation
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-gpu=6
+#SBATCH --gpus-per-node=2
+#SBATCH --mem=128G
+#SBATCH --cpus-per-gpu=8
 
 # Pre-execution command
-ml GCCcore/13.3.0 \
-    CUDA/12.6.0 \
-    UCX-CUDA/1.16.0-GCCcore-13.3.0-CUDA-12.6.0 \
-    NCCL/2.22.3-GCCcore-13.3.0-CUDA-12.6.0 \
-    Python/3.11.5-GCCcore-13.2.0 \
-    CMake/3.24.3-GCCcore-11.3.0 \
-    OpenMPI \
-    mpi4py \
-    OpenSSL/3
+ml --force purge
+ml CMake/3.29.3-GCCcore-13.3.0
+ml mpi4py/3.1.5
+ml OpenMPI/4.1.6-GCC-13.2.0
+ml cuDNN/8.9.7.29-CUDA-12.3.0
+ml CUDA/12.6.0
+ml NCCL/2.22.3-GCCcore-13.3.0-CUDA-12.6.0
+ml Python/3.12.3-GCCcore-13.3.0
+ml OpenSSL/3
 
 source .venv/bin/activate
 export OMP_NUM_THREADS=4
@@ -36,15 +37,15 @@ bash -c "ray start \
 --head \
 --node-ip-address=localhost \
 --port=7639 \
---num-cpus=6 \
---num-gpus=1 \
+--num-cpus=8 \
+--num-gpus=2 \
 --dashboard-host=0.0.0.0 \
 --dashboard-port=8265 \
 && \
 itwinai exec-pipeline \
 --config-path configuration_files \
 --config-name vega_training \
-num_workers_dataloader=2 \
+num_workers_dataloader=4 \
 experiment_name=minimal-ddp-${USER} \
-run_id=minimal-ddp-${timestamp} \
+run_name=minimal-ddp-${timestamp} \
 +pipe_key=hpo"
