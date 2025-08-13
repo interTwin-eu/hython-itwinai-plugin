@@ -15,7 +15,7 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --gpus-per-node=4
 #SBATCH --gres=gpu:4
-#SBATCH --mem=384G
+#SBATCH --mem=500G
 #SBATCH --exclusive
 
 echo "DEBUG: SLURM_SUBMIT_DIR: $SLURM_SUBMIT_DIR"
