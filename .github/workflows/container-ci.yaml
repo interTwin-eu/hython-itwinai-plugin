@@ -1,0 +1,89 @@
+# --------------------------------------------------------------------------------------
+# Part of the interTwin Project: https://www.intertwin.eu/
+#
+# Created by: Matteo Bunino
+#
+# Credit:
+# - Matteo Bunino <matteo.bunino@cern.ch> - CERN
+# --------------------------------------------------------------------------------------
+
+name: Container CI
+
+on:
+  push:
+    # TODO: uncomment below
+    # branches: [main]
+
+  # If not triggered on push, but on PR, the commit hash is a bit weird
+  # pull_request:
+
+
+# Uncomment this if you also want to use release pipelines 
+#   release:
+#     types: [created]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config:
+          # Note: in the tag template we replace '$' with '@' as otherwise the GH action will
+          # try to interpolate the values, breaking the template
+
+          - base_img_name: "ghcr.io/intertwin-eu/itwinai:torch-slim-latest"
+            img_name: "hython-itwinai-plugin"
+            dockerfile: "../env-files/Dockerfile"
+            nickname: "torch"
+            tag_template: "itwinai@{itwinai_version}-torch@{framework_version}-@{os_version}"
+            skip_hpc: true
+            skip_singularity: true
+            docker_registry: ghcr.io/intertwin-eu
+            singularity_registry: "''"
+            build_arm: false
+            
+          - base_img_name: "ghcr.io/intertwin-eu/itwinai:jlab-slim-latest"
+            img_name: "hython-itwinai-plugin"
+            dockerfile: "../env-files/jupyter.Dockerfile"
+            nickname: "jlab"
+            tag_template: "jlab-itwinai@{itwinai_version}-torch@{framework_version}-@{os_version}"
+            skip_hpc: true
+            skip_singularity: true
+            docker_registry: ghcr.io/intertwin-eu
+            singularity_registry: "''"
+            build_arm: false
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Build and Test with Custom Action
+        uses: interTwin-eu/itwinai/.github/actions/build-container@main
+        with:
+          # Find all the inputs here: https://raw.githubusercontent.com/interTwin-eu/itwinai/refs/heads/main/.github/actions/build-container/action.yml
+
+          base_img_name: ${{ matrix.config.base_img_name }}
+          img_name: ${{ matrix.config.img_name }}
+          dockerfile: ${{ matrix.config.dockerfile }}
+          nickname: ${{ matrix.config.nickname }}
+          tag_template: ${{ matrix.config.tag_template }}
+          build_arm: ${{ matrix.config.build_arm }}
+          skip_hpc: ${{ matrix.config.skip_hpc }}
+          skip_singularity: ${{ matrix.config.skip_singularity }}
+          docker_registry: ${{ matrix.config.docker_registry }}
+          singularity_registry: ${{ matrix.config.singularity_registry }}
+          dagger_itwinai_module: itwinai
+          release: ${{ github.event_name == 'release' && github.event.action == 'created' && 'true' || 'false' }}
+
+          # NOTE: remember to set these secrets
+
+          # This is needed to push containers to ghcr containers registry
+          docker_token: ${{ secrets.DOCKER_TOKEN }}
+          # This is needed to store Dagger logs to the Dagger cloud UI
+          dagger_cloud_token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+          # This is the configuration for interLink
+          interlink_values: ${{ secrets.INTERLINK_VALUES }}
+          # Singularity container registry password
+          singularity_password: ${{ secrets.SINGULARITY_PWD }}
+          # Singularity container registry username
+          singularity_username: ${{ secrets.SINGULARITY_USR }}
