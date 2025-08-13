@@ -1,5 +1,4 @@
 import logging
-import pickle
 from typing import Dict, List, Tuple
 
 import torch
@@ -39,7 +38,7 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         valid_downsampler: Dict | None = None,
         downsampling_temporal_dynamic: bool | None = None,
         min_sample_target: int | None = None,
-        seq_length: int | None = None
+        seq_length: int | None = None,
     ) -> None:
         self.save_parameters(**self.locals2params(locals()))
 
@@ -50,18 +49,28 @@ class RNNDatasetGetterAndPreprocessor(DataSplitter):
         for i in self.parameters:
             setattr(cfg, i, self.parameters[i])
 
-        scaler = Scaler(cfg, cfg.scaling_use_cached) # type: ignore
+        # Enable lazy loading to prevent loading entire dataset into memory
+        cfg.data_lazy_load = getattr(cfg, "data_lazy_load", True)
+        if cfg.data_lazy_load:
+            cfg.data_lazy_load = False  # type: ignore
+            py_logger.warning(
+                f"(data_lazy_load={cfg.data_lazy_load}) Lazy Loading is not yet supported! "
+                "Deactivated Lazy loading..."
+            )
+        scaler = Scaler(cfg, cfg.scaling_use_cached)  # type: ignore
 
-        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train") # type: ignore
+        train_dataset = get_dataset(cfg.dataset)(cfg, scaler, True, "train")  # type: ignore
+        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid")  # type: ignore
 
-        # check pickled dataset size if in debug mode
         if py_logger.isEnabledFor(logging.DEBUG):
-            py_logger.debug(
-                "pickled train_dataset_size: "
-                f"{len(pickle.dumps(train_dataset)) / (1024 * 1024 * 1024):.2f} GB"
+            try:
+                dataset_len = (
+                    len(train_dataset) if hasattr(train_dataset, "__len__") else "unknown"
                 )
+                py_logger.debug(f"train_dataset length: {dataset_len}")
+            except Exception as e:
+                py_logger.debug(f"Could not determine dataset size: {e}")
 
-        val_dataset = get_dataset(cfg.dataset)(cfg, scaler, False, "valid") # type: ignore
         return train_dataset, val_dataset, None
 
 

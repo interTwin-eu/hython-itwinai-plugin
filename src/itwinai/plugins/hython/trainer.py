@@ -1,10 +1,8 @@
 import logging
 from functools import partial
-from pathlib import Path
-from timeit import default_timer
+from time import perf_counter
 from typing import Any, Dict, Literal, Tuple
 
-import numpy as np
 import torch
 from hydra.utils import instantiate
 from torch import nn
@@ -18,9 +16,8 @@ from tqdm.auto import tqdm
 from hython.models import get_model_class as get_hython_model
 from hython.utils import get_lr_scheduler, get_optimizer, get_temporal_steps
 from itwinai.components import monitor_exec
-from itwinai.constants import EPOCH_TIME_DIR
 from itwinai.distributed import suppress_workers_print
-from itwinai.loggers import EpochTimeTracker, Logger
+from itwinai.loggers import Logger
 from itwinai.torch.monitoring.monitoring import measure_gpu_utilization
 from itwinai.torch.profiling.profiler import profile_torch_trainer
 from itwinai.torch.trainer import TorchTrainer, _get_tuning_metric_name
@@ -341,30 +338,20 @@ class RNNDistributedTrainer(TorchTrainer):
 
         # prediction can be probabilistic
         if self.config.model_head_layer == "regression":
-            pred_cpu = prediction["y_hat"].detach().cpu().numpy()
+            pred_tensor = prediction["y_hat"].detach().cpu()
         elif self.config.model_head_layer == "distr_normal":
-            pred_cpu = prediction["mu"].detach().cpu().numpy()
+            pred_tensor = prediction["mu"].detach().cpu()
         else:
             raise ValueError(f"Unknown model head layer: {self.config.model_head_layer}")
 
-        target_cpu = target.detach().cpu().numpy()
+        target_tensor = target.detach().cpu()
 
         if self.epoch_preds is None:
-            # Pre-allocate memory for results
-            batch_size = (
-                prediction["y_hat"].size(0)
-                if "y_hat" in prediction
-                else prediction["mu"].size(0)
-            )
-            expected_samples = len(self.train_dataloader) * batch_size
-            self.epoch_preds = torch.zeros((expected_samples, *prediction["y_hat"].shape[1:]))
-            self.epoch_targets = torch.zeros((expected_samples, *target.shape[1:]))
-        else:
-            arrays = [self.epoch_preds, pred_cpu]
-            self.epoch_preds = torch.from_numpy(np.concatenate(arrays, axis=0))
+            self.epoch_preds = []
+            self.epoch_targets = []
 
-            arrays = [self.epoch_targets, target_cpu]
-            self.epoch_targets = torch.from_numpy(np.concatenate(arrays, axis=0))
+        self.epoch_preds.append(pred_tensor)
+        self.epoch_targets.append(target_tensor)
 
     def _compute_batch_loss(
         self,
@@ -483,8 +470,8 @@ class RNNDistributedTrainer(TorchTrainer):
             dynamic_bt = batch["xd"]
             # process targets
             targets_bt = batch["y"]
-            # process static data
-            static_bt = batch["xs"].unsqueeze(1).expand(-1, dynamic_bt.size(1), -1)
+            batch_size, seq_len, _ = dynamic_bt.shape
+            static_bt = batch["xs"].unsqueeze(1).repeat(1, seq_len, 1)
             # concatenate dynamic and static data
             x_concat = torch.cat((dynamic_bt, static_bt), dim=-1)
 
@@ -510,9 +497,15 @@ class RNNDistributedTrainer(TorchTrainer):
         if self.epoch_preds is None or self.epoch_targets is None:
             raise ValueError("epoch_preds or epoch_targets is None")
 
+        if not self.epoch_preds or not self.epoch_targets:
+            raise ValueError("No predictions or targets collected during epoch")
+
+        epoch_preds_tensor = torch.cat(self.epoch_preds, dim=0)
+        epoch_targets_tensor = torch.cat(self.epoch_targets, dim=0)
+
         metrics = self.compute_metrics(
-            true=self.epoch_targets,
-            pred=self.epoch_preds,
+            true=epoch_targets_tensor,
+            pred=epoch_preds_tensor,
         )
 
         return epoch_loss, metrics
@@ -520,26 +513,6 @@ class RNNDistributedTrainer(TorchTrainer):
     @profile_torch_trainer
     @measure_gpu_utilization
     def train(self) -> None:
-        # Tracking epoch times for scaling test
-        epoch_time_tracker: EpochTimeTracker | None = None
-        if self.strategy.is_main_worker:
-            epoch_time_output_dir = Path(
-                f"scalability-metrics/{self.run_name}/{EPOCH_TIME_DIR}"
-            )
-            epoch_time_file_name = (
-                f"epochtime_{self.strategy.name}_{self.strategy.global_world_size()}N.csv"
-            )
-            epoch_time_output_path = epoch_time_output_dir / epoch_time_file_name
-
-            epoch_time_tracker = EpochTimeTracker(
-                strategy_name=self.strategy.name,
-                save_path=epoch_time_output_path,
-                num_workers=self.strategy.global_world_size(),
-                should_log=self.measure_epoch_time
-                and self.strategy.is_main_worker
-                and self.strategy.is_distributed,
-            )
-
         metric_history = {f"train_{target}": [] for target in self.config.target_variables}
         # add empty validation metrics
         metric_history.update({f"val_{target}": [] for target in self.config.target_variables})
@@ -552,7 +525,7 @@ class RNNDistributedTrainer(TorchTrainer):
             disable=self.disable_tqdm or not self.strategy.is_main_worker,
         )
         for self.current_epoch in progress_bar:
-            epoch_start_time = default_timer()
+            epoch_start_time = perf_counter()
             progress_bar.set_description(f"Epoch {self.current_epoch + 1}/{self.epochs}")
             self.set_epoch()
             # run train and validation epoch step of hython trainer
@@ -609,11 +582,15 @@ class RNNDistributedTrainer(TorchTrainer):
             if self.test_every and (self.current_epoch + 1) % self.test_every == 0:
                 self.test_epoch()
 
-            # only main worker and for distributed
-            if self.strategy.is_main_worker and self.strategy.is_distributed:
-                assert epoch_time_tracker is not None
-                epoch_time = default_timer() - epoch_start_time
-                epoch_time_tracker.add_epoch_time(self.current_epoch + 1, epoch_time)  # type: ignore
+            # Measure epoch time and log
+            if self.strategy.is_main_worker:
+                epoch_time = perf_counter() - epoch_start_time
+                self.log(
+                    item=epoch_time,
+                    identifier="epoch_time_s",
+                    kind="metric",
+                    step=self.current_epoch,
+                )
 
             for target in self.config.target_variables:
                 metric_history[f"train_{target}"].append(train_metric[target])
@@ -656,14 +633,14 @@ class RNNDistributedTrainer(TorchTrainer):
         self,
         train_dataset: Dataset,
         validation_dataset: Dataset | None = None,
-        test_dataset: Dataset | None = None,  # ? TODO: Why not used?
+        test_dataset: Dataset | None = None,  # ignored in training
     ) -> None:
         """Create the dataloaders.
 
         Args:
             train_dataset (Dataset): training dataset
             validation_dataset (Dataset): validation dataset
-            test_dataset (Dataset | None): test dataset (not used currently)
+            test_dataset (Dataset | None): test dataset (ignored in training)
         """
         self.train_dataloader = self.strategy.create_dataloader(
             dataset=train_dataset,
@@ -679,7 +656,9 @@ class RNNDistributedTrainer(TorchTrainer):
             f" = {len(self.train_dataloader)}"
         )
 
-        self.train_time_range = train_dataset[0]["xd"].shape[0]
+        # Get time range from config instead of accessing dataset directly
+        # to avoid triggering full dataset loading
+        self.train_time_range = getattr(self.config, "seq_length", 0)
 
         # Get sequence length from configuration
         if validation_dataset is not None:
@@ -691,4 +670,4 @@ class RNNDistributedTrainer(TorchTrainer):
                 generator=self.torch_rng,
                 shuffle=self.config.shuffle_validation,
             )
-            self.val_time_range = validation_dataset[0]["xd"].shape[0]
+            self.val_time_range = getattr(self.config, "seq_length", 0)

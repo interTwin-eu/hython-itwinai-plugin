@@ -117,7 +117,6 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  # - thetaS
   - thetaR
   - KsatVer
   - c
@@ -283,7 +282,7 @@ training:
             experiment_name: ${experiment_name}
             log_on_workers: -1
             run_name: ${run_name}
-            log_freq: batch
+            log_freq: epoch
             tracking_uri: ${tracking_uri}
 
 hpo:
@@ -368,7 +367,7 @@ hpo:
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
             run_name: ${run_name}
-            log_freq: batch
+            log_freq: epoch
             log_on_workers: -1
             tracking_uri: ${tracking_uri}
                     
