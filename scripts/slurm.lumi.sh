@@ -15,7 +15,7 @@
 #SBATCH --partition=small-g
 #SBATCH --nodes=2
 #SBATCH --gpus-per-node=2
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=48
 #SBATCH --exclusive
 #SBATCH --mem=256G
 

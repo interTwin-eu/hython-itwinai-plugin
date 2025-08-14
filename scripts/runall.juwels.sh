@@ -33,8 +33,8 @@ DIST_MODE="ddp"
 TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=ddp run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$DIST_MODE-n$N" \
-    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.out" \
-    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.err" \
+    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.out" \
+    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.err" \
     --nodes=$NNODES \
     --gpus-per-node=$NGPUS_PER_NODE \
     ./scripts/slurm.juwels.sh
@@ -44,8 +44,8 @@ DIST_MODE="deepspeed"
 TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=deepspeed run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$DIST_MODE-n$N" \
-    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.out" \
-    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.err" \
+    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.out" \
+    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.err" \
     --nodes=$NNODES \
     --gpus-per-node=$NGPUS_PER_NODE \
     ./scripts/slurm.juwels.sh
@@ -55,8 +55,8 @@ DIST_MODE="horovod"
 TRAINING_CMD="itwinai exec-pipeline --config-path configuration_files --config-name juwels_training strategy=horovod run_name=$RUN_NAME num_workers_per_trial=$TOT_GPUS trials=$NUM_TRIALS"
 sbatch --export=ALL,DIST_MODE="$DIST_MODE",TRAINING_CMD="$TRAINING_CMD",PYTHON_VENV="$PYTHON_VENV" \
     --job-name="$DIST_MODE-n$N" \
-    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.out" \
-    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS.err" \
+    --output="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.out" \
+    --error="logs_slurm/job-$DIST_MODE-n$TOT_GPUS-$RUN_NAME.err" \
     --nodes=$NNODES \
     --gpus-per-node=$NGPUS_PER_NODE \
     ./scripts/slurm.juwels.sh
