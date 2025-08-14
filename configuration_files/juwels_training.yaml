@@ -18,9 +18,9 @@ run_name: "juwels-train-eurac-1"
 
 work_dir: /p/scratch/intertwin/datasets/eurac/model
 
-train_temporal_range: ["2017-01-01", "2019-12-31"]
-valid_temporal_range: ["2020-01-01", "2020-12-31"]
-test_temporal_range: ["2022-01-01", "2022-12-31"]
+train_temporal_range: ["2019-06-01", "2019-12-31"]
+valid_temporal_range: ["2020-06-01", "2020-12-31"]
+test_temporal_range: ["2022-06-01", "2022-12-31"]
 
 seed: 10 
 
@@ -56,13 +56,13 @@ lr_scheduler_hython:
   factor: 0.5
   patience: 10
 
-seq_length: 180
+seq_length: 10
 
 learning_rate: 0.001
 
 batch: 512
 
-epochs: 5
+epochs: 2
 time_ray: True
 
 gradient_clip:
@@ -80,12 +80,12 @@ predict_steps: 0 # all # (prediction: 0 = t ), ( forecasts: 1 = t+1, 2 = t + 2)
 train_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 valid_downsampler: #null
   _target_: hython.sampler.downsampler.RandomDownsampler
   frac_time: null
-  frac_space: 0.1
+  frac_space: 0.05
 
 test_downsampler: null
 
@@ -101,7 +101,7 @@ num_workers_dataloader: 8
 num_workers_per_trial: 2
 cpu_per_worker: 11
 gpu_per_worker: 1 # 0. - 1
-trials: 1
+trials: 2
 
 
 data_source:
@@ -117,7 +117,6 @@ static_categorical_inputs:
    - wflow_soil
 
 static_inputs:
-  # - thetaS
   - thetaR
   - KsatVer
   - c
@@ -283,7 +282,7 @@ training:
             experiment_name: ${experiment_name}
             log_on_workers: -1
             run_name: ${run_name}
-            log_freq: batch
+            log_freq: epoch
             tracking_uri: ${tracking_uri}
 
 hpo:
@@ -368,7 +367,7 @@ hpo:
           - _target_: itwinai.loggers.MLFlowLogger
             experiment_name: ${experiment_name}
             run_name: ${run_name}
-            log_freq: batch
+            log_freq: epoch
             log_on_workers: -1
             tracking_uri: ${tracking_uri}
                     
