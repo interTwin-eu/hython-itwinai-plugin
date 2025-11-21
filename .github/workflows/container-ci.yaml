@@ -54,7 +54,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Build and Test with Custom Action
         uses: interTwin-eu/itwinai/.github/actions/build-container@main
